@@ -1,3 +1,8 @@
 target
 ffmpeg
 misc
+src/av/*.o
+src/av/bin
+src/av/*.ts
+src/av/data
+

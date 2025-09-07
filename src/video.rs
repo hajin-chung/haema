@@ -224,23 +224,12 @@ pub async fn compute_video_segment(
     let end: f32 = keyframes[segment_idx];
     let duration = end - start;
 
-    let mut command = Command::new("ffmpeg");
+    let mut command = Command::new("./segment_transcode");
     command.args([
-        // "-copyts",
-        "-ss", &start.to_string(),
-        "-i", video_path,
-        "-t", &(duration-0.01).to_string(),
-        // "-to", &(end-0.001).to_string(),
-        "-vf", "setpts=PTS-STARTPTS",
-        "-af", "asetpts=PTS-STARTPTS",
-        // "-avoid_negative_ts", "make_zero",
-        "-c:v", "h264_qsv", "-global_quality", "25", "-preset", "medium",
-        "-r", "23.98",
-        "-c:a", "aac",
-        // "-c", "copy",
-        "-map", "0:v:0", "-map", "0:a:0",
-        "-f", "mpegts",
-        "pipe:1",
+        video_path,
+        "h264",
+        &start.to_string(),
+        &duration.to_string(),
     ]);
 
     if let Some(program) = command.as_std().get_program().to_str() {

@@ -91,8 +91,36 @@ type Movie = {
 
 ### goals
 
-1. find I-frame timestamp or frame number quickly
-2. seek to i'th I-frame and transcode until (i+1)'th I-frame
+1. ~~find I-frame timestamp or frame number quickly~~
+2. ~~seek to i'th I-frame and transcode until (i+1)'th I-frame~~
+
+I thought to have a smoothly playable and super fast streaming I had to cut 
+streams based on I-frames since I-frames are fast to seek to. so naively thought 
+I needed to get timestamps of all I-frames as fast as possible but thinking 
+about how seeking works in ffmpeg I realized that you don't have to get the 
+exact timestamp of all I-frames. you don't even need I-frame timestamps at all.
+
+for example if I have a video of length 6 seconds I could just do this and when
+1.ts request comes in I can just seek to 2.0 seconds and ffmpeg would 
+automatically seek to the largest key frame smaller that or equal to 2.0 seconds
+and start decode until we hit the 2.0 second timestamp then encode until 4.0 seconds.
+
+```hls
+#EXTINF:2.0
+0.ts
+#EXTINF:2.0
+1.ts
+#EXTINF:2.0
+2.ts
+```
+
+====> double seeking
+
+as long as keyframes of the videos are granularly distributed this would result in
+very fast .ts file packaging. enabling on-demand streaming.
+
+1. seek to largest keyframe that is smaller or equal than request segment.
+2. decode until start of segment then start transcoding until end of segment.
 
 ### useful functions
 
