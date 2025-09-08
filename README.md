@@ -1,3 +1,5 @@
+# Haema
+
 simple self hosted streaming service in one binary and conf files
 
 ## features
@@ -8,26 +10,10 @@ simple self hosted streaming service in one binary and conf files
 2. keep track of watch history
 3. file structure as source of truth
 
-## milestones
+## usage
 
-1. create endpoint handling master.m3u8 hls playlist
-2. create endpoint handling each stream hls playlist
-3. handle each video segment encoding
-    1. use ffmpeg commands
-    2. use ffmpeg-next crate
-    3. use raw dog libav* functions
-
-## api list
-
-1. list shows (movie, series)
-2. search show
-3. get show data
-4. play show
-    - support multiple resolutions
-5. save watch progress
-
-## flags
-
+```
+haema
 - p, port: port number
 - h, host: host address
 - t, target_path: path of videos to serve
@@ -35,23 +21,25 @@ simple self hosted streaming service in one binary and conf files
 - cache <true|false>: enable or disable cache
 - cache-path: path to cache directory
 - cache-limit: set cache limit
+```
 
 ## Check list
 
-- [x] milestones 1
-- [x] milestones 2
-- [x] milestones 3.1
-- [ ] milestones 3.2
-- [ ] milestones 3.3
-- [ ] parse flags
+- [ ] implement video streaming endpoints
+    - [ ] write test code for hm_transcode and check if output segments are aligned
+- [ ] implement metadata endpoints (db, video metadata, indexing ...etc)
 - [ ] create docker image that builds ffmpeg with just the things hamea uses
 - [ ] create benchmarks
-- [ ] implement version 0.1
-- [ ] implement version 0.2
-- [ ] implement version 0.3
 
 
 ## API
+
+1. list shows (movie, series)
+2. search show
+3. get show data
+4. play show
+    - support multiple resolutions
+5. save watch progress
 
 ```typescript
 type Show = Movie | Series;
