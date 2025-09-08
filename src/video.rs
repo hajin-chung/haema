@@ -249,8 +249,8 @@ pub async fn compute_video_segment(
     if !output.status.success() {
         let len = output.stdout.len();
         eprintln!("{len}");
-        let stderr = String::from_utf8(output.stderr)
-            .map_err(|_err| AppError::Error("".to_string()))?;
+        let stderr =
+            String::from_utf8(output.stderr).map_err(|_err| AppError::Error("".to_string()))?;
         eprintln!("{}", stderr);
         return Err(AppError::CommandFail(format!(
             "compute video segment using ffmpeg status failed"
@@ -263,6 +263,6 @@ pub async fn compute_video_segment(
     //     .map_err(|_err| AppError::Error("".to_string()))?;
     // eprintln!("{}", stderr);
 
-
     Ok(output.stdout)
 }
+

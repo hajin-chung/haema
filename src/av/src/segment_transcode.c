@@ -51,10 +51,15 @@ char *limit(char *str, int limit) {
 
 void log_packet(TranscodeContext *tctx, AVPacket *pkt, const char *tag) {
     AVRational *tb = &tctx->ifmt_ctx->streams[pkt->stream_index]->time_base;
+    int64_t pkt_pts = av_rescale_q(
+        pkt->pts, tctx->ifmt_ctx->streams[pkt->stream_index]->time_base,
+        av_get_time_base_q());
     fprintf(stderr,
-            "[%s] key: %d stream_index: %d pts_time: %s duration_time: %s\n",
+            "[%s] key: %d stream_index: %d pts_time: %s dts_time: %s "
+            "duration_time: %s\n",
             tag, pkt->flags & AV_PKT_FLAG_KEY, pkt->stream_index,
             limit(av_ts2timestr(pkt->pts, tb), 6),
+            limit(av_ts2timestr(pkt->dts, tb), 6),
             limit(av_ts2timestr(pkt->duration, tb), 6));
 }
 
@@ -273,7 +278,7 @@ int config_output(TranscodeContext *tctx) {
     return 0;
 }
 
-int encode_write(TranscodeContext *tctx, AVPacket *pkt, AVFrame *frame) {
+int encode_write(TranscodeContext *tctx, AVPacket *pkt, AVFrame *frame, int do_write) {
     AVCodecContext *enc_ctx = tctx->enc_ctx;
     int ret = 0;
 
@@ -290,7 +295,10 @@ int encode_write(TranscodeContext *tctx, AVPacket *pkt, AVFrame *frame) {
         av_packet_rescale_ts(pkt, enc_ctx->time_base,
                              tctx->out_video_stream->time_base);
         log_packet(tctx, pkt, "out");
-
+        if (!do_write) {
+            fprintf(stderr, "don't write yet!\n");
+            continue;
+        }
         if ((ret = av_interleaved_write_frame(tctx->ofmt_ctx, pkt)) < 0) {
             fprintf(stderr, "Error during writing data to output file: %s\n",
                     av_err2str(ret));
@@ -373,11 +381,17 @@ int dec_enc(TranscodeContext *tctx, AVPacket *pkt, int64_t start_ts,
                 goto dec_enc_end;
             }
 
-            dump_transcode_context(tctx);
+            // dump_transcode_context(tctx);
         }
 
-        int64_t frame_ts = av_rescale_q(frame->pts, dec_ctx->pkt_timebase,
-                                        av_get_time_base_q());
+        int64_t frame_ts =
+            av_rescale_q(frame->pts, dec_ctx->pkt_timebase, AV_TIME_BASE_Q);
+
+        int do_write = start_ts <= frame_ts && frame_ts < end_ts;
+        frame->pts =
+            av_rescale_q(frame->pts, dec_ctx->pkt_timebase, enc_ctx->time_base);
+        if ((ret = encode_write(tctx, pkt, frame, do_write)) < 0)
+            fprintf(stderr, "Error during encoding and writing\n");
 
         if (frame_ts < start_ts) {
             fprintf(stderr,
@@ -393,11 +407,6 @@ int dec_enc(TranscodeContext *tctx, AVPacket *pkt, int64_t start_ts,
                     frame_ts, end_ts);
             return 0;
         }
-
-        frame->pts =
-            av_rescale_q(frame->pts, dec_ctx->pkt_timebase, enc_ctx->time_base);
-        if ((ret = encode_write(tctx, pkt, frame)) < 0)
-            fprintf(stderr, "Error during encoding and writing\n");
 
     dec_enc_end:
         av_frame_free(&frame);
@@ -445,13 +454,6 @@ int transcode_segment(const char *in_filename, const char *encoder_name,
         goto end;
     }
 
-    // // adjust start timestamp with stream's start time stamp
-    int64_t stream_start_ts =
-        av_rescale_q(tctx->in_video_stream->start_time,
-                     tctx->in_video_stream->time_base, AV_TIME_BASE_Q);
-    // start_ts -= stream_start_ts;
-    end_ts += stream_start_ts;
-
     if ((ret = config_output(tctx)) < 0) {
         fprintf(stderr, "Failed to config output\n");
         goto end;
@@ -459,15 +461,36 @@ int transcode_segment(const char *in_filename, const char *encoder_name,
 
     dump_transcode_context(tctx);
 
+    // // adjust start timestamp with stream's start time stamp
+    int64_t stream_start_ts =
+        av_rescale_q(tctx->in_audio_stream->start_time,
+                     tctx->in_audio_stream->time_base, AV_TIME_BASE_Q);
+    end_ts += stream_start_ts;
+
     // // seek to start_ts
+
     // av_seek_frame(tctx->ifmt_ctx, tctx->in_video_stream_index,
     //               av_rescale_q(start_ts,
     //                            AV_TIME_BASE_Q,
     //                            tctx->in_video_stream->time_base),
     //               AVSEEK_FLAG_BACKWARD);
+
     // av_seek_frame(tctx->ifmt_ctx, -1, start_ts, AVSEEK_FLAG_BACKWARD);
-    avformat_seek_file(tctx->ifmt_ctx, -1, INT64_MIN, start_ts, start_ts,
-                       AVSEEK_FLAG_BACKWARD);
+
+    // int64_t start_ts_atb = av_rescale_q(start_ts, AV_TIME_BASE_Q,
+    //                                     tctx->in_audio_stream->time_base);
+    // avformat_seek_file(tctx->ifmt_ctx, tctx->in_audio_stream_index,
+    // INT64_MIN,
+    //                    start_ts_atb, start_ts_atb, AVSEEK_FLAG_BACKWARD);
+
+    int64_t start_ts_vtb = av_rescale_q(start_ts, AV_TIME_BASE_Q,
+                                        tctx->in_video_stream->time_base);
+    avformat_seek_file(tctx->ifmt_ctx, tctx->in_video_stream_index, INT64_MIN,
+                       start_ts_vtb, start_ts_vtb, AVSEEK_FLAG_BACKWARD);
+
+    // avformat_seek_file(tctx->ifmt_ctx, -1, INT64_MIN, start_ts, start_ts,
+    //                    AVSEEK_FLAG_BACKWARD);
+    start_ts += stream_start_ts;
 
     fprintf(stderr, "start: %ld\tend: %ld\n", start_ts, end_ts);
     while (ret >= 0) {
@@ -486,10 +509,17 @@ int transcode_segment(const char *in_filename, const char *encoder_name,
             dec_enc(tctx, pkt, start_ts, end_ts);
             av_packet_unref(pkt);
         } else if (pkt->stream_index == tctx->in_audio_stream_index) {
-            if (pkt_pts < start_ts)
+            if (pkt_pts < start_ts) {
+                fprintf(stderr,
+                        "Audio packet pts %ld is smaller than start "
+                        "timestamp %ld\n",
+                        pkt_pts, start_ts);
                 continue;
-            if (!tctx->enc_ctx->hw_frames_ctx)
+            }
+            if (!tctx->enc_ctx->hw_frames_ctx) {
+                fprintf(stderr, "encoder hw_frames_ctx not initialized yet\n");
                 continue;
+            }
             // copy audio codecs
             // continue;
             pkt->stream_index = OUT_AUDIO_STREAM_INDEX;
@@ -513,7 +543,7 @@ int transcode_segment(const char *in_filename, const char *encoder_name,
         goto end;
     }
 
-    if ((ret = encode_write(tctx, pkt, NULL)) < 0) {
+    if ((ret = encode_write(tctx, pkt, NULL, 1)) < 0) {
         fprintf(stderr, "Failed to flush encoder %s\n", av_err2str(ret));
         goto end;
     }
@@ -555,3 +585,4 @@ int main(int argc, char **argv) {
         return 0;
     }
 }
+

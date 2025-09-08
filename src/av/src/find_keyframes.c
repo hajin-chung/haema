@@ -142,8 +142,9 @@ int main(int argc, char **argv) {
         if (ret < 0)
             break;
 
-        if (pkt->stream_index == video_stream_index)
-            log_packet(ifmt_ctx, pkt);
+        log_packet(ifmt_ctx, pkt);
+        // if (pkt->stream_index == video_stream_index)
+        //     log_packet(ifmt_ctx, pkt);
 
         av_packet_unref(pkt);
     }
