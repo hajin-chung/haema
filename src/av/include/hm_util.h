@@ -96,9 +96,9 @@ static inline void log_packet(TranscodeContext *tctx, AVPacket *pkt, const char 
             "[%s] key: %d stream_index: %d pts_time: %s dts_time: %s "
             "duration_time: %s\n",
             tag, pkt->flags & AV_PKT_FLAG_KEY, pkt->stream_index,
-            limit(av_ts2timestr(pkt->pts, tb), 6),
-            limit(av_ts2timestr(pkt->dts, tb), 6),
-            limit(av_ts2timestr(pkt->duration, tb), 6));
+            av_ts2timestr(pkt->pts, tb),
+            av_ts2timestr(pkt->dts, tb),
+            av_ts2timestr(pkt->duration, tb));
 }
 
 static inline void dump_transcode_context(TranscodeContext *tctx) {

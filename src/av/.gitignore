@@ -1,3 +1,7 @@
 bin
 in
 out
+test/test-venv
+*.d
+*.o
+log

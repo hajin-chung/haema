@@ -26,7 +26,8 @@ haema
 ## Check list
 
 - [ ] implement video streaming endpoints
-    - [ ] write test code for hm_transcode and check if output segments are aligned
+    - [x] write test code for hm_transcode and check if output segments are aligned
+    - [ ] fix hm_transcode segment video stream timestamp alignment error
 - [ ] implement metadata endpoints (db, video metadata, indexing ...etc)
 - [ ] create docker image that builds ffmpeg with just the things hamea uses
 - [ ] create benchmarks
