@@ -115,80 +115,36 @@ impl fmt::Display for StreamType {
     }
 }
 
-pub async fn get_video_keyframes(path: &str) -> Result<Vec<f32>, AppError> {
-    // ffprobe -select_streams v:0 -show_entries packet=pts_time,flags -of csv=p=0 <path>
-    let mut command = Command::new("ffprobe");
-    command.args([
-        "-select_streams",
-        "v:0",
-        "-show_entries",
-        "packet=pts_time,flags",
-        "-of",
-        "csv=p=0",
-        path,
-    ]);
-
-    println!(
-        "command: {:?} {:?}",
-        command.as_std().get_program(),
-        command.as_std().get_args().collect::<Vec<_>>(),
-    );
+pub async fn get_video_duration(video_path: &str) -> Result<f64, AppError> {
+    let mut command = Command::new("./src/av/bin/hm_probe");
+    command.args([video_path]);
 
     let output = command.output().await.map_err(|err| {
-        AppError::CommandFail(format!("get video keyframes using ffprobe failed: {err}"))
+        AppError::CommandFail(format!("get video duration using hm_probe failed: {err}"))
     })?;
-
-    if !output.status.success() {
-        return Err(AppError::CommandFail(format!(
-            "get video keyframes using ffprobe status failed"
-        )));
-    }
 
     let stdout = String::from_utf8(output.stdout).map_err(|err| {
         AppError::CommandFail(format!(
-            "get video keyframes using ffprobe failed to parse stdout: {err}"
+            "get video duration failed to decode hm_probe stdout to utf8 : {err}"
         ))
     })?;
-
-    let re = Regex::new(r"(?<timestamp>[\d\.]+),K").unwrap();
-    let mut keyframes: Vec<f32> = re
-        .captures_iter(&stdout)
-        .map(|caps| {
-            caps.name("timestamp")
-                .unwrap()
-                .as_str()
-                .parse::<f32>()
-                .unwrap()
-            // TODO: proper error handling
-            // .map_err(|err| {
-            //     AppError::CommandFail(format!(
-            //         "get video keyframes failed to parse keyframes to float: {err}"
-            //     ))
-            // })
-        })
-        .collect();
-
-    // add last timestamp to better calculate durations of each segment
-    let re = Regex::new(r"(?<timestamp>[\d\.]+),").unwrap();
-    if let Some(last_line) = stdout.lines().last() {
-        if let Some(caps) = re.captures(last_line) {
-            let cap = caps.name("timestamp").unwrap().as_str().parse::<f32>();
-            if let Ok(timestamp) = cap {
-                keyframes.push(timestamp);
-            }
-        }
-    }
-    Ok(keyframes)
+    stdout.trim().parse::<f64>().map_err(|err| {
+        AppError::CommandFail(format!(
+            "get video duration failed to parse hm_probe stdout '{stdout}' to utf8 : {err}"
+        ))
+    })
 }
 
-pub fn create_hls_media_playlist(keyframes: &Vec<f32>) -> String {
-    let mut durations = vec![keyframes[0]];
-    durations.extend::<Vec<f32>>(
-        keyframes
-            .windows(2)
-            .map(|window| window[1] - window[0])
-            .collect(),
-    );
+pub fn create_hls_media_playlist(video_duration: f64, segment_duration: f64) -> String {
+    let mut durations: Vec<f64> = vec![];
+    let mut cur: f64 = 0.0;
+
+    while cur + segment_duration < video_duration {
+        durations.push(segment_duration);
+        cur += segment_duration;
+    }
+    durations.push(video_duration-cur);
+
     let target_duration: u32 = durations
         .iter()
         .max_by(|a, b| a.partial_cmp(b).unwrap())
@@ -203,7 +159,7 @@ pub fn create_hls_media_playlist(keyframes: &Vec<f32>) -> String {
     playlist += "#EXT-X-VERSION:4\n";
     playlist += "#EXT-X-MEDIA-SEQUENCE:0\n";
     durations.iter().enumerate().for_each(|(idx, duration)| {
-        playlist += "#EXT-X-DISCONTINUITY\n";
+        // playlist += "#EXT-X-DISCONTINUITY\n";
         playlist += format!("#EXTINF:{}\n", duration).as_str();
         playlist += format!("{}.ts\n", idx).as_str();
     });
@@ -213,18 +169,18 @@ pub fn create_hls_media_playlist(keyframes: &Vec<f32>) -> String {
 
 pub async fn compute_video_segment(
     video_path: &str,
-    keyframes: &Vec<f32>,
+    video_duration: f64,
+    segment_duration: f64,
     segment_idx: usize,
 ) -> Result<Vec<u8>, AppError> {
-    let start: f32 = if segment_idx == 0 {
-        0.0
+    let start: f64 = segment_duration * (segment_idx as f64);
+    let duration: f64 = if start + segment_duration < video_duration {
+        segment_duration
     } else {
-        keyframes[segment_idx - 1]
+        video_duration - start
     };
-    let end: f32 = keyframes[segment_idx];
-    let duration = end - start;
 
-    let mut command = Command::new("./segment_transcode");
+    let mut command = Command::new("./src/av/bin/hm_transcode");
     command.args([
         video_path,
         "h264",
@@ -243,7 +199,9 @@ pub async fn compute_video_segment(
     }
 
     let output = command.output().await.map_err(|err| {
-        AppError::CommandFail(format!("compute video segment using ffmpeg failed: {err}"))
+        AppError::CommandFail(format!(
+            "compute video segment using hm_transcode failed: {err}"
+        ))
     })?;
 
     if !output.status.success() {
@@ -256,12 +214,6 @@ pub async fn compute_video_segment(
             "compute video segment using ffmpeg status failed"
         )));
     }
-
-    // let len = output.stdout.len();
-    // eprintln!("{len}");
-    // let stderr = String::from_utf8(output.stderr)
-    //     .map_err(|_err| AppError::Error("".to_string()))?;
-    // eprintln!("{}", stderr);
 
     Ok(output.stdout)
 }
