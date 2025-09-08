@@ -15,14 +15,14 @@ cat out/2.log | grep "\[out\]" > out/2.log.out
 cat out/3.log | grep "\[in\]" > out/3.log.in
 cat out/3.log | grep "\[out\]" > out/3.log.out
 
-./bin/find_keyframes in/$IN > out/$IN.pkt
+# ./bin/find_keyframes in/$IN > out/$IN.pkt
 ./bin/find_keyframes out/0.ts > out/0.ts.pkt
 ./bin/find_keyframes out/1.ts > out/1.ts.pkt
 ./bin/find_keyframes out/2.ts > out/2.ts.pkt
 ./bin/find_keyframes out/3.ts > out/3.ts.pkt
 
-cat out/$IN.pkt | grep "stream_index:0" > out/$IN.vpkt
-cat out/$IN.pkt | grep "stream_index:1" > out/$IN.apkt
+# cat out/$IN.pkt | grep "stream_index:0" > out/$IN.vpkt
+# cat out/$IN.pkt | grep "stream_index:1" > out/$IN.apkt
 cat out/0.ts.pkt | grep "stream_index:0" > out/0.ts.vpkt
 cat out/0.ts.pkt | grep "stream_index:1" > out/0.ts.apkt
 cat out/1.ts.pkt | grep "stream_index:0" > out/1.ts.vpkt

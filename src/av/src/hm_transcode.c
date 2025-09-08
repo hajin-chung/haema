@@ -1,3 +1,16 @@
+/*
+ * Haema Transcode
+ * Copyright (c) 2025 Hajin Chung <hajinchung1@gmail.com>
+ * Don't know what to say here
+ * just do whatever you want with this code
+ *
+ * Haema Transcode is binary + library for correctly segmenting and transcoding
+ * parts of a large video very fast.
+ *
+ * Currently utilizes intel's qsv hardware accelerated codecs.
+ * timestamps of source video are preserved in segmented output.
+ */
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -189,11 +202,11 @@ int encode_write(TranscodeContext *tctx, AVPacket *pkt, AVFrame *frame,
         pkt->stream_index = OUT_VIDEO_STREAM_INDEX;
         av_packet_rescale_ts(pkt, enc_ctx->time_base,
                              tctx->out_video_stream->time_base);
-        log_packet(tctx, pkt, "out");
         if (!do_write) {
             fprintf(stderr, "don't write yet!\n");
             continue;
         }
+        log_packet(tctx, pkt, "out");
         if ((ret = av_interleaved_write_frame(tctx->ofmt_ctx, pkt)) < 0) {
             fprintf(stderr, "Error during writing data to output file: %s\n",
                     av_err2str(ret));
@@ -376,35 +389,17 @@ int transcode_segment(const char *in_filename, const char *encoder_name,
 
     dump_transcode_context(tctx);
 
-    // // adjust start timestamp with stream's start time stamp
+    // adjust start timestamp with stream's start time stamp
     int64_t stream_start_ts =
         av_rescale_q(tctx->in_audio_stream->start_time,
                      tctx->in_audio_stream->time_base, AV_TIME_BASE_Q);
     end_ts += stream_start_ts;
 
-    // // seek to start_ts
-
-    // av_seek_frame(tctx->ifmt_ctx, tctx->in_video_stream_index,
-    //               av_rescale_q(start_ts,
-    //                            AV_TIME_BASE_Q,
-    //                            tctx->in_video_stream->time_base),
-    //               AVSEEK_FLAG_BACKWARD);
-
-    // av_seek_frame(tctx->ifmt_ctx, -1, start_ts, AVSEEK_FLAG_BACKWARD);
-
-    // int64_t start_ts_atb = av_rescale_q(start_ts, AV_TIME_BASE_Q,
-    //                                     tctx->in_audio_stream->time_base);
-    // avformat_seek_file(tctx->ifmt_ctx, tctx->in_audio_stream_index,
-    // INT64_MIN,
-    //                    start_ts_atb, start_ts_atb, AVSEEK_FLAG_BACKWARD);
-
+    // seek based on video stream
     int64_t start_ts_vtb = av_rescale_q(start_ts, AV_TIME_BASE_Q,
                                         tctx->in_video_stream->time_base);
     avformat_seek_file(tctx->ifmt_ctx, tctx->in_video_stream_index, INT64_MIN,
                        start_ts_vtb, start_ts_vtb, AVSEEK_FLAG_BACKWARD);
-
-    // avformat_seek_file(tctx->ifmt_ctx, -1, INT64_MIN, start_ts, start_ts,
-    //                    AVSEEK_FLAG_BACKWARD);
     start_ts += stream_start_ts;
 
     fprintf(stderr, "start: %ld\tend: %ld\n", start_ts, end_ts);

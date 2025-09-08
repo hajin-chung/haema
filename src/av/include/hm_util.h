@@ -92,9 +92,6 @@ static inline char *limit(char *str, int limit) {
 
 static inline void log_packet(TranscodeContext *tctx, AVPacket *pkt, const char *tag) {
     AVRational *tb = &tctx->ifmt_ctx->streams[pkt->stream_index]->time_base;
-    int64_t pkt_pts = av_rescale_q(
-        pkt->pts, tctx->ifmt_ctx->streams[pkt->stream_index]->time_base,
-        av_get_time_base_q());
     fprintf(stderr,
             "[%s] key: %d stream_index: %d pts_time: %s dts_time: %s "
             "duration_time: %s\n",
