@@ -90,15 +90,25 @@ static inline char *limit(char *str, int limit) {
     return str;
 }
 
-static inline void log_packet(TranscodeContext *tctx, AVPacket *pkt, const char *tag) {
-    AVRational *tb = &tctx->ifmt_ctx->streams[pkt->stream_index]->time_base;
+static inline void log_packet(TranscodeContext *tctx, AVPacket *pkt, AVStream *stream, const char *tag) {
+    AVRational tb = stream->time_base;
     fprintf(stderr,
             "[%s] key: %d stream_index: %d pts_time: %s dts_time: %s "
             "duration_time: %s\n",
             tag, pkt->flags & AV_PKT_FLAG_KEY, pkt->stream_index,
-            av_ts2timestr(pkt->pts, tb),
-            av_ts2timestr(pkt->dts, tb),
-            av_ts2timestr(pkt->duration, tb));
+            av_ts2timestr(pkt->pts, &tb),
+            av_ts2timestr(pkt->dts, &tb),
+            av_ts2timestr(pkt->duration, &tb));
+}
+
+static inline void log_frame(TranscodeContext *tctx, AVFrame *frame, AVStream *stream, const char *tag) {
+    AVRational tb = stream->time_base;
+    fprintf(stderr,
+            "[%s] key: %d pts_time: %s dts_time: %s duration_time: %s\n",
+            tag, frame->flags & AV_FRAME_FLAG_KEY,
+            av_ts2timestr(frame->pts, &tb),
+            av_ts2timestr(frame->pkt_dts, &tb),
+            av_ts2timestr(frame->duration, &tb));
 }
 
 static inline void dump_transcode_context(TranscodeContext *tctx) {
