@@ -234,6 +234,8 @@ int config_enc(TranscodeContext *tctx) {
 
         pkt->stream_index = OUT_AUDIO_STREAM_INDEX;
         pkt->pos = -1;
+        av_packet_rescale_ts(pkt, tctx->in_audio_stream->time_base,
+                             tctx->out_audio_stream->time_base);
         log_packet(tctx, pkt, tctx->out_audio_stream, "out");
 
         ret = av_interleaved_write_frame(tctx->ofmt_ctx, pkt);
@@ -262,6 +264,8 @@ int encode_write(TranscodeContext *tctx, AVPacket *pkt, AVFrame *frame) {
 
         pkt->stream_index = OUT_VIDEO_STREAM_INDEX;
         log_packet(tctx, pkt, tctx->out_video_stream, "out");
+        av_packet_rescale_ts(pkt, tctx->dec_ctx->pkt_timebase,
+                             tctx->out_video_stream->time_base);
         if ((ret = av_interleaved_write_frame(tctx->ofmt_ctx, pkt)) < 0) {
             fprintf(stderr, "Error during writing data to output file: %s\n",
                     av_err2str(ret));
@@ -316,7 +320,8 @@ int dec_enc(TranscodeContext *tctx, AVPacket *pkt, int64_t start_ts,
             av_rescale_q(frame->pts, dec_ctx->pkt_timebase, AV_TIME_BASE_Q);
 
         if (frame_ts < start_ts || end_ts <= frame_ts) {
-            fprintf(stderr, "Video frame ts %ld(%ld) is out of range [%ld, %ld)\n",
+            fprintf(stderr,
+                    "Video frame ts %ld(%ld) is out of range [%ld, %ld)\n",
                     frame->pts, frame_ts, start_ts, end_ts);
             goto dec_enc_end;
         }
@@ -425,7 +430,8 @@ int transcode_segment(const char *in_filename, const char *encoder_name,
             av_packet_unref(pkt);
         } else if (pkt->stream_index == tctx->in_audio_stream_index &&
                    !audio_stream_end) {
-            if (end_ts <= pkt_pts) audio_stream_end = 1;
+            if (end_ts <= pkt_pts)
+                audio_stream_end = 1;
             if (pkt_pts < start_ts || end_ts <= pkt_pts) {
                 fprintf(stderr, "Audio packet %ld is not in range  [%ld %ld)\n",
                         pkt_pts, start_ts, end_ts);
@@ -441,6 +447,8 @@ int transcode_segment(const char *in_filename, const char *encoder_name,
             // continue;
             pkt->stream_index = OUT_AUDIO_STREAM_INDEX;
             pkt->pos = -1;
+            av_packet_rescale_ts(pkt, tctx->in_audio_stream->time_base,
+                                 tctx->out_audio_stream->time_base);
             log_packet(tctx, pkt, tctx->out_audio_stream, "out");
 
             ret = av_interleaved_write_frame(tctx->ofmt_ctx, pkt);

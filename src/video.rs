@@ -183,7 +183,7 @@ pub async fn compute_video_segment(
     let mut command = Command::new("./src/av/bin/hm_transcode");
     command.args([
         video_path,
-        "h264",
+        "h264_qsv",
         &start.to_string(),
         &duration.to_string(),
     ]);

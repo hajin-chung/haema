@@ -27,7 +27,10 @@ haema
 
 - [ ] implement video streaming endpoints
     - [x] write test code for hm_transcode and check if output segments are aligned
-    - [ ] fix hm_transcode segment video stream timestamp alignment error
+    - [x] fix hm_transcode segment video stream timestamp alignment error
+    - [ ] output transcoded result to buffer and return that buffer currently it writes to stdout
+    - [ ] rust ffi bindings for hm_transcode + project restructuring
+    - [ ] pass encoder params to hm_transcode
 - [ ] implement metadata endpoints (db, video metadata, indexing ...etc)
 - [ ] create docker image that builds ffmpeg with just the things hamea uses
 - [ ] create benchmarks
