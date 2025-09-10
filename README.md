@@ -28,7 +28,8 @@ haema
 - [ ] implement video streaming endpoints
     - [x] write test code for hm_transcode and check if output segments are aligned
     - [x] fix hm_transcode segment video stream timestamp alignment error
-    - [ ] output transcoded result to buffer and return that buffer currently it writes to stdout
+    - [x] output transcoded result to buffer and return that buffer currently it writes to stdout
+    - [ ] generate flame graph to analyze which part takes the most time
     - [ ] rust ffi bindings for hm_transcode + project restructuring
     - [ ] pass encoder params to hm_transcode
 - [ ] implement metadata endpoints (db, video metadata, indexing ...etc)
@@ -158,7 +159,7 @@ almost like a reading list
 ```bash
 ffmpeg version n7.1.1-57-g1b48158a23 Copyright (c) 2000-2025 the FFmpeg developers
   built with gcc 13 (Ubuntu 13.3.0-6ubuntu2~24.04)
-  configuration: --enable-vaapi --enable-libvpl --enable-gpl --enable-nonfree
+  configuration: --enable-vaapi --enable-libvpl
   libavutil      59. 39.100 / 59. 39.100
   libavcodec     61. 19.101 / 61. 19.101
   libavformat    61.  7.100 / 61.  7.100
@@ -166,5 +167,28 @@ ffmpeg version n7.1.1-57-g1b48158a23 Copyright (c) 2000-2025 the FFmpeg develope
   libavfilter    10.  4.100 / 10.  4.100
   libswscale      8.  3.100 /  8.  3.100
   libswresample   5.  3.100 /  5.  3.100
-  libpostproc    58.  3.100 / 58.  3.100
+```
+
+
+```bash
+sudo apt install pkg-config
+sudo apt install libvpl-dev 
+sudo apt install libva-dev
+sudo apt install libva-drm2
+sudo apt install libdrm-dev
+sudo apt install libmfx-gen1
+sudo apt install intel-media-va-driver-non-free
+```
+
+```bash
+$ time ./bin/hm_transcode in/in.mp4 h264_qsv 0.00 4.00 > out/0.ts 2> out/0.log
+
+real    0m1.066s
+user    0m0.522s
+sys     0m0.408s
+
+$ time ffmpeg -ss 4 -i in/in.mp4 -t 4 -c:v h264_qsv -c:a copy -f mpegts out.ts > out/f0.ts 2> out/f0.log
+real    0m1.742s
+user    0m5.537s
+sys     0m0.961s
 ```

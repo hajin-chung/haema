@@ -28,9 +28,16 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 DEPS = $(OBJ:.o=.d)
 -include $(DEPS)
 
-.PHONY: all clean
+.PHONY: all clean test
 
-clean:
+test: all
+	$(RM) test/log*
+	cd test && python3 test_hm_transcode.py
+
+test-clean:
+	$(RM) test/log*
+
+clean: test-clean
 	@echo "Cleaning up..."
 	$(RM) $(EXE) $(OBJ) $(DEPS)
 	$(RM) out/*

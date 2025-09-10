@@ -11,6 +11,7 @@
  * timestamps of source video are preserved in segmented output.
  */
 
+#include <libavformat/avio.h>
 #include <libavutil/avutil.h>
 #include <libavutil/mathematics.h>
 #include <stdint.h>
@@ -180,8 +181,7 @@ int config_output(TranscodeContext *tctx) {
     out_audio_stream->codecpar->codec_tag = 0;
     out_audio_stream->time_base = tctx->in_audio_stream->time_base;
 
-    ret = avio_open(&tctx->ofmt_ctx->pb, "pipe:1", AVIO_FLAG_WRITE);
-    if (ret < 0) {
+    if ((ret = avio_open_dyn_buf(&tctx->ofmt_ctx->pb)) < 0) {
         fprintf(stderr, "Cannot open output file: %s\n", av_err2str(ret));
         return ret;
     }
@@ -346,7 +346,8 @@ int dec_enc(TranscodeContext *tctx, AVPacket *pkt, int64_t start_ts,
 // TODO: add arguments for decoding and encoding
 // TODO: return pointer to buffer
 int transcode_segment(const char *in_filename, const char *encoder_name,
-                      const double start, const double duration) {
+                      const double start, const double duration,
+                      uint8_t **output_buffer, int *output_size) {
     int64_t start_ts = (int64_t)round(start * AV_TIME_BASE);
     int64_t end_ts = (int64_t)round((duration + start) * AV_TIME_BASE);
     TranscodeContext *tctx = malloc(sizeof(TranscodeContext));
@@ -473,6 +474,9 @@ int transcode_segment(const char *in_filename, const char *encoder_name,
         goto end;
     }
 
+    *output_size = avio_close_dyn_buf(tctx->ofmt_ctx->pb, output_buffer);
+    tctx->ofmt_ctx->pb = NULL;
+
     ret = 0;
 end:
     avformat_close_input(&tctx->ifmt_ctx);
@@ -495,14 +499,26 @@ int main(int argc, char **argv) {
     const char *encoder_name = argv[2];
     const double start = atof(argv[3]);
     const double duration = atof(argv[4]);
-    int ret = transcode_segment(in_filename, encoder_name, start, duration);
+    
+    uint8_t *buffer = NULL;
+    int buffer_size = 0;
+    int ret = transcode_segment(in_filename, encoder_name, start, duration, &buffer, &buffer_size);
 
     if (ret < 0) {
         fprintf(stderr,
                 "failed to transcode segment from %s starting at %lf for %lf "
                 "seconds",
                 in_filename, start, duration);
-        return 0;
+        av_free(buffer);
+        return 1;
     }
+    
+    if (buffer && buffer_size > 0) {
+        fwrite(buffer, 1, buffer_size, stdout);
+        fflush(stdout);
+    }
+
+    av_free(buffer);
+    return 0;
 }
 
