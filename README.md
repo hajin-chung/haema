@@ -29,7 +29,7 @@ haema
     - [x] write test code for hm_transcode and check if output segments are aligned
     - [x] fix hm_transcode segment video stream timestamp alignment error
     - [x] output transcoded result to buffer and return that buffer currently it writes to stdout
-    - [ ] generate flame graph to analyze which part takes the most time
+    - [x] generate flame graph to analyze which part takes the most time
     - [ ] rust ffi bindings for hm_transcode + project restructuring
     - [ ] pass encoder params to hm_transcode
 - [ ] implement metadata endpoints (db, video metadata, indexing ...etc)
@@ -192,3 +192,5 @@ real    0m1.742s
 user    0m5.537s
 sys     0m0.961s
 ```
+
+after generating flamegraphs found out it seems ffmpeg doens't use libvpl and uses old libmfx I guess
