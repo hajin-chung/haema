@@ -155,3 +155,16 @@ almost like a reading list
     5. write trailer
         `libavformat/avformat.h > av_write_trailer`
 
+```bash
+ffmpeg version n7.1.1-57-g1b48158a23 Copyright (c) 2000-2025 the FFmpeg developers
+  built with gcc 13 (Ubuntu 13.3.0-6ubuntu2~24.04)
+  configuration: --enable-vaapi --enable-libvpl --enable-gpl --enable-nonfree
+  libavutil      59. 39.100 / 59. 39.100
+  libavcodec     61. 19.101 / 61. 19.101
+  libavformat    61.  7.100 / 61.  7.100
+  libavdevice    61.  3.100 / 61.  3.100
+  libavfilter    10.  4.100 / 10.  4.100
+  libswscale      8.  3.100 /  8.  3.100
+  libswresample   5.  3.100 /  5.  3.100
+  libpostproc    58.  3.100 / 58.  3.100
+```

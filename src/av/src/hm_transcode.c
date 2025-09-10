@@ -349,7 +349,6 @@ int transcode_segment(const char *in_filename, const char *encoder_name,
                       const double start, const double duration) {
     int64_t start_ts = (int64_t)round(start * AV_TIME_BASE);
     int64_t end_ts = (int64_t)round((duration + start) * AV_TIME_BASE);
-    int64_t duration_ts = (int64_t)round(duration * AV_TIME_BASE);
     TranscodeContext *tctx = malloc(sizeof(TranscodeContext));
     AVPacket *pkt = NULL;
     AVBufferRef *hw_device_ctx = NULL;
@@ -393,10 +392,6 @@ int transcode_segment(const char *in_filename, const char *encoder_name,
     // seek based on video stream
     int64_t start_ts_vtb = av_rescale_q(start_ts, AV_TIME_BASE_Q,
                                         tctx->in_video_stream->time_base);
-    int64_t duration_ts_vtb = av_rescale_q(duration_ts, AV_TIME_BASE_Q,
-                                           tctx->in_video_stream->time_base);
-    // start_ts_vtb -= duration_ts_vtb;
-    // start_ts_vtb -= AV_TIME_BASE;
     avformat_seek_file(tctx->ifmt_ctx, tctx->in_video_stream_index, INT64_MIN,
                        start_ts_vtb, start_ts_vtb, AVSEEK_FLAG_BACKWARD);
     fprintf(stderr, "START_TS: %ld\n", stream_start_ts);

@@ -3,7 +3,7 @@ CC = gcc
 RM = rm -f
 
 FFMPEG_LIBS   = libavdevice libavformat libavfilter libavcodec libswresample libswscale libavutil
-CFLAGS       += -Wall -g -MMD -MP $(shell pkg-config --cflags $(FFMPEG_LIBS)) -I$(PWD)/include
+CFLAGS       += -Wall -g -O2 -MMD -MP $(shell pkg-config --cflags $(FFMPEG_LIBS)) -I$(PWD)/include
 LDLIBS       += $(shell pkg-config --libs $(FFMPEG_LIBS))
 
 SRC_DIR = src
