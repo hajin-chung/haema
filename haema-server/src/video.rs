@@ -1,7 +1,7 @@
+use haema_ff_sys::{hm_get_video_duration, hm_transcode};
 use regex::Regex;
 use std::fmt;
 use std::str::FromStr;
-use tokio::process::Command;
 
 use crate::error::AppError;
 
@@ -116,23 +116,7 @@ impl fmt::Display for StreamType {
 }
 
 pub async fn get_video_duration(video_path: &str) -> Result<f64, AppError> {
-    let mut command = Command::new("./src/av/bin/hm_probe");
-    command.args([video_path]);
-
-    let output = command.output().await.map_err(|err| {
-        AppError::CommandFail(format!("get video duration using hm_probe failed: {err}"))
-    })?;
-
-    let stdout = String::from_utf8(output.stdout).map_err(|err| {
-        AppError::CommandFail(format!(
-            "get video duration failed to decode hm_probe stdout to utf8 : {err}"
-        ))
-    })?;
-    stdout.trim().parse::<f64>().map_err(|err| {
-        AppError::CommandFail(format!(
-            "get video duration failed to parse hm_probe stdout '{stdout}' to utf8 : {err}"
-        ))
-    })
+    Ok(hm_get_video_duration(video_path))
 }
 
 pub fn create_hls_media_playlist(video_duration: f64, segment_duration: f64) -> String {
@@ -143,7 +127,7 @@ pub fn create_hls_media_playlist(video_duration: f64, segment_duration: f64) -> 
         durations.push(segment_duration);
         cur += segment_duration;
     }
-    durations.push(video_duration-cur);
+    durations.push(video_duration - cur);
 
     let target_duration: u32 = durations
         .iter()
@@ -180,41 +164,7 @@ pub async fn compute_video_segment(
         video_duration - start
     };
 
-    let mut command = Command::new("./src/av/bin/hm_transcode");
-    command.args([
-        video_path,
-        "h264_qsv",
-        &start.to_string(),
-        &duration.to_string(),
-    ]);
-
-    if let Some(program) = command.as_std().get_program().to_str() {
-        print!("command: {} ", program);
-        command.as_std().get_args().for_each(|arg_option| {
-            if let Some(arg) = arg_option.to_str() {
-                print!("{} ", arg)
-            }
-        });
-        println!("");
-    }
-
-    let output = command.output().await.map_err(|err| {
-        AppError::CommandFail(format!(
-            "compute video segment using hm_transcode failed: {err}"
-        ))
-    })?;
-
-    if !output.status.success() {
-        let len = output.stdout.len();
-        eprintln!("{len}");
-        let stderr =
-            String::from_utf8(output.stderr).map_err(|_err| AppError::Error("".to_string()))?;
-        eprintln!("{}", stderr);
-        return Err(AppError::CommandFail(format!(
-            "compute video segment using ffmpeg status failed"
-        )));
-    }
-
-    Ok(output.stdout)
+    hm_transcode(video_path, "h264_qsv", start, duration)
+        .map_err(|err| AppError::Error(format!("hm_transcode failed with code {err}")))
 }
 

@@ -1,0 +1,86 @@
+use std::ffi::CString;
+use std::os::raw::{c_char, c_double, c_int};
+use std::slice;
+
+unsafe extern "C" {
+    fn transcode_segment(
+        in_filename: *const c_char,
+        encoder_name: *const c_char,
+        start: c_double,
+        duration: c_double,
+        output_buffer: *mut *mut u8,
+        output_size: *mut c_int,
+    ) -> c_int;
+
+    fn free_buffer(buffer: *mut u8);
+
+    fn hm_probe(in_filename: *const c_char) -> c_double;
+}
+
+pub fn hm_transcode(
+    in_filename: &str,
+    encoder_name: &str,
+    start: f64,
+    duration: f64,
+) -> Result<Vec<u8>, i32> {
+    let in_filename = CString::new(in_filename).unwrap();
+    let encoder_name = CString::new(encoder_name).unwrap();
+    let mut output_data: *mut u8 = std::ptr::null_mut();
+    let mut output_size: i32 = 0;
+
+    let ret = unsafe {
+        transcode_segment(
+            in_filename.as_ptr(),
+            encoder_name.as_ptr(),
+            start,
+            duration,
+            &mut output_data,
+            &mut output_size,
+        )
+    };
+
+    if ret < 0 {
+        return Err(ret);
+    }
+
+    let data_slice = unsafe {
+        let slc = { slice::from_raw_parts(output_data, output_size as usize) };
+        free_buffer(output_data);
+        slc
+    };
+    let data_vec = data_slice.to_vec();
+    Ok(data_vec)
+}
+
+pub fn hm_get_video_duration(in_filename: &str) -> f64 {
+    let in_filename = CString::new(in_filename).unwrap();
+    unsafe { hm_probe(in_filename.as_ptr()) }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::*;
+    use std::ffi::CString;
+
+    #[test]
+    fn it_works() {
+        let in_filename = CString::new("/mnt/d/anime/01.mp4").unwrap();
+        let encoder_name = CString::new("h264_qsv").unwrap();
+        let start: f64 = 20.0;
+        let duration: f64 = 4.0;
+        let mut output_buffer: *mut u8 = std::ptr::null_mut();
+        let mut output_size: i32 = 0;
+        unsafe {
+            let result = transcode_segment(
+                in_filename.as_ptr(),
+                encoder_name.as_ptr(),
+                start,
+                duration,
+                &mut output_buffer,
+                &mut output_size,
+            );
+            assert_eq!(result, 0);
+        }
+    }
+}
+

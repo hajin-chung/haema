@@ -90,7 +90,7 @@ static inline char *limit(char *str, int limit) {
     return str;
 }
 
-static inline void log_packet(TranscodeContext *tctx, AVPacket *pkt, AVStream *stream, const char *tag) {
+static inline void log_packet(AVPacket *pkt, AVStream *stream, const char *tag) {
     AVRational tb = stream->time_base;
     fprintf(stderr,
             "[%s] key: %d stream_index: %d pts_time: %s dts_time: %s "
@@ -101,7 +101,7 @@ static inline void log_packet(TranscodeContext *tctx, AVPacket *pkt, AVStream *s
             av_ts2timestr(pkt->duration, &tb));
 }
 
-static inline void log_frame(TranscodeContext *tctx, AVFrame *frame, AVStream *stream, const char *tag) {
+static inline void log_frame(AVFrame *frame, AVStream *stream, const char *tag) {
     AVRational tb = stream->time_base;
     fprintf(stderr,
             "[%s] key: %d pts_time: %s dts_time: %s duration_time: %s\n",

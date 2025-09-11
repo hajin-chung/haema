@@ -30,7 +30,7 @@ haema
     - [x] fix hm_transcode segment video stream timestamp alignment error
     - [x] output transcoded result to buffer and return that buffer currently it writes to stdout
     - [x] generate flame graph to analyze which part takes the most time
-    - [ ] rust ffi bindings for hm_transcode + project restructuring
+    - [x] rust ffi bindings for hm_transcode + project restructuring
     - [ ] pass encoder params to hm_transcode
 - [ ] implement metadata endpoints (db, video metadata, indexing ...etc)
 - [ ] create docker image that builds ffmpeg with just the things hamea uses

@@ -9,7 +9,7 @@
  */
 #include <stdio.h>
 
-#include "../include/hm_util.h"
+#include "include/hm_util.h"
 
 double hm_probe(const char *in_filename) {
     AVFormatContext *ifmt_ctx = NULL;
@@ -41,6 +41,7 @@ double hm_probe(const char *in_filename) {
     return duration_s;
 }
 
+#if 0
 int main(int argc, char **argv) {
     if (argc != 2) {
         fprintf(stderr, "usage: %s <input file>\n", argv[0]);
@@ -52,3 +53,4 @@ int main(int argc, char **argv) {
     printf("%lf\n", ret);
     return 0;
 }
+#endif

@@ -1,120 +1,31 @@
-#include <errno.h>
+/*
+ * Haema Transcode
+ * Copyright (c) 2025 Hajin Chung <hajinchung1@gmail.com>
+ * Don't know what to say here
+ * just do whatever you want with this code
+ *
+ * Haema Transcode is binary + library for correctly segmenting and transcoding
+ * parts of a large video very fast.
+ *
+ * Currently utilizes intel's qsv hardware accelerated codecs.
+ * timestamps of source video are preserved in segmented output.
+ */
+
+#include <libavformat/avio.h>
+#include <libavutil/avutil.h>
+#include <libavutil/mathematics.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include <libavcodec/avcodec.h>
-#include <libavcodec/codec.h>
+#include <libavcodec/packet.h>
 #include <libavformat/avformat.h>
-#include <libavformat/avio.h>
-#include <libavutil/avutil.h>
-#include <libavutil/buffer.h>
-#include <libavutil/error.h>
-#include <libavutil/hwcontext.h>
-#include <libavutil/mathematics.h>
-#include <libavutil/rational.h>
-#include <libavutil/timestamp.h>
+
+#include "include/hm_util.h"
 
 const int OUT_VIDEO_STREAM_INDEX = 0;
 const int OUT_AUDIO_STREAM_INDEX = 1;
-
-typedef struct TranscodeContext {
-    AVBufferRef *hw_device_ctx;
-
-    const char *in_filename;
-    AVFormatContext *ifmt_ctx;
-    AVFormatContext *ofmt_ctx;
-
-    // best video stream's index
-    int in_video_stream_index;
-
-    // best audio stream's index
-    int in_audio_stream_index;
-
-    AVStream *in_video_stream;
-    AVStream *in_audio_stream;
-    AVStream *out_video_stream;
-    AVStream *out_audio_stream;
-
-    // both decoder and encoder contexts are for video since audio is copied
-    AVCodecContext *dec_ctx;
-    AVCodecContext *enc_ctx;
-
-    AVCodec *video_enc_codec;
-} TranscodeContext;
-
-char *limit(char *str, int limit) {
-    // FIXME: check strlen for out of bounds error
-    str[limit] = '\0';
-    return str;
-}
-
-void log_packet(TranscodeContext *tctx, AVPacket *pkt, const char *tag) {
-    AVRational *tb = &tctx->ifmt_ctx->streams[pkt->stream_index]->time_base;
-    int64_t pkt_pts = av_rescale_q(
-        pkt->pts, tctx->ifmt_ctx->streams[pkt->stream_index]->time_base,
-        av_get_time_base_q());
-    fprintf(stderr,
-            "[%s] key: %d stream_index: %d pts_time: %s dts_time: %s "
-            "duration_time: %s\n",
-            tag, pkt->flags & AV_PKT_FLAG_KEY, pkt->stream_index,
-            limit(av_ts2timestr(pkt->pts, tb), 6),
-            limit(av_ts2timestr(pkt->dts, tb), 6),
-            limit(av_ts2timestr(pkt->duration, tb), 6));
-}
-
-void dump_transcode_context(TranscodeContext *tctx) {
-    if (tctx->ifmt_ctx == NULL) {
-        fprintf(stderr, "ifmt_ctx is NULL\n");
-    } else {
-        av_dump_format(tctx->ifmt_ctx, 0, tctx->in_filename, 0);
-    }
-
-    fprintf(stderr, "\tInput video stream index: %d\n",
-            tctx->in_video_stream_index);
-    fprintf(stderr, "\tInput video start time: %s\n",
-            av_ts2timestr(tctx->in_video_stream->start_time,
-                          &tctx->in_video_stream->time_base));
-    fprintf(stderr, "\tInput audio stream index: %d\n",
-            tctx->in_audio_stream_index);
-    fprintf(stderr, "\tInput audio start time: %s\n",
-            av_ts2timestr(tctx->in_audio_stream->start_time,
-                          &tctx->in_audio_stream->time_base));
-    fprintf(stderr, "\tInput audio stream time base: %d / %d\n",
-            tctx->in_audio_stream->time_base.num,
-            tctx->in_audio_stream->time_base.den);
-
-    if (tctx->ofmt_ctx == NULL) {
-        fprintf(stderr, "ofmt_ctx is NULL\n");
-    } else {
-        av_dump_format(tctx->ofmt_ctx, 0, NULL, 1);
-    }
-    fprintf(stderr, "\tOutput audio stream time base: %d / %d\n",
-            tctx->out_audio_stream->time_base.num,
-            tctx->out_audio_stream->time_base.den);
-}
-
-const AVCodec *find_qsv_decoder(enum AVCodecID id) {
-    switch (id) {
-    case AV_CODEC_ID_H264:
-        return avcodec_find_decoder_by_name("h264_qsv");
-    case AV_CODEC_ID_HEVC:
-        return avcodec_find_decoder_by_name("hevc_qsv");
-    case AV_CODEC_ID_VP9:
-        return avcodec_find_decoder_by_name("vp9_qsv");
-    case AV_CODEC_ID_VP8:
-        return avcodec_find_decoder_by_name("vp8_qsv");
-    case AV_CODEC_ID_AV1:
-        return avcodec_find_decoder_by_name("av1_qsv");
-    case AV_CODEC_ID_MPEG2VIDEO:
-        return avcodec_find_decoder_by_name("mpeg2_qsv");
-    case AV_CODEC_ID_MJPEG:
-        return avcodec_find_decoder_by_name("mjpeg_qsv");
-    default:
-        fprintf(stderr, "Codec is not supportted by qsv\n");
-        return NULL;
-    }
-}
 
 int get_format(AVCodecContext *avctx, const enum AVPixelFormat *pix_fmts) {
     while (*pix_fmts != AV_PIX_FMT_NONE) {
@@ -268,9 +179,9 @@ int config_output(TranscodeContext *tctx) {
         return ret;
     }
     out_audio_stream->codecpar->codec_tag = 0;
+    out_audio_stream->time_base = tctx->in_audio_stream->time_base;
 
-    ret = avio_open(&tctx->ofmt_ctx->pb, "pipe:1", AVIO_FLAG_WRITE);
-    if (ret < 0) {
+    if ((ret = avio_open_dyn_buf(&tctx->ofmt_ctx->pb)) < 0) {
         fprintf(stderr, "Cannot open output file: %s\n", av_err2str(ret));
         return ret;
     }
@@ -278,7 +189,66 @@ int config_output(TranscodeContext *tctx) {
     return 0;
 }
 
-int encode_write(TranscodeContext *tctx, AVPacket *pkt, AVFrame *frame, int do_write) {
+int config_enc(TranscodeContext *tctx) {
+    AVCodecContext *enc_ctx = tctx->enc_ctx;
+    AVCodecContext *dec_ctx = tctx->dec_ctx;
+    int ret;
+
+    enc_ctx->hw_frames_ctx = av_buffer_ref(dec_ctx->hw_frames_ctx);
+    if (!enc_ctx->hw_frames_ctx) {
+        fprintf(stderr, "Failed to reference decoder context hw_frames_ctx\n");
+        return -1;
+    }
+
+    enc_ctx->time_base = dec_ctx->pkt_timebase;
+    enc_ctx->framerate = dec_ctx->framerate;
+    enc_ctx->pix_fmt = AV_PIX_FMT_QSV;
+
+    // TODO: variable out video dimensions
+    enc_ctx->width = dec_ctx->width;
+    enc_ctx->height = dec_ctx->height;
+
+    // TODO: handle encoder options
+
+    if ((ret = avcodec_open2(enc_ctx, enc_ctx->codec, NULL)) < 0) {
+        fprintf(stderr, "Failed to open encode codec: %s\n", av_err2str(ret));
+        return ret;
+    }
+
+    tctx->out_video_stream->time_base = enc_ctx->time_base;
+    ret = avcodec_parameters_from_context(tctx->out_video_stream->codecpar,
+                                          enc_ctx);
+    if (ret < 0) {
+        fprintf(stderr, "Failed to copy codec parameters to stream\n");
+        return ret;
+    }
+
+    if ((ret = avformat_write_header(tctx->ofmt_ctx, NULL)) < 0) {
+        fprintf(stderr, "Error while writing stream header: %s\n",
+                av_err2str(ret));
+        return ret;
+    }
+
+    while (tctx->audio_pktq->len) {
+        AVPacket *pkt = packet_queue_pop(tctx->audio_pktq);
+
+        pkt->stream_index = OUT_AUDIO_STREAM_INDEX;
+        pkt->pos = -1;
+        av_packet_rescale_ts(pkt, tctx->in_audio_stream->time_base,
+                             tctx->out_audio_stream->time_base);
+        log_packet(pkt, tctx->out_audio_stream, "out");
+
+        ret = av_interleaved_write_frame(tctx->ofmt_ctx, pkt);
+        if (ret < 0) {
+            fprintf(stderr, "Error muxing audio packet\n");
+            break;
+        }
+    }
+    packet_queue_free(tctx->audio_pktq);
+    return 0;
+}
+
+int encode_write(TranscodeContext *tctx, AVPacket *pkt, AVFrame *frame) {
     AVCodecContext *enc_ctx = tctx->enc_ctx;
     int ret = 0;
 
@@ -291,14 +261,11 @@ int encode_write(TranscodeContext *tctx, AVPacket *pkt, AVFrame *frame, int do_w
     while (1) {
         if ((ret = avcodec_receive_packet(enc_ctx, pkt)))
             break;
+
         pkt->stream_index = OUT_VIDEO_STREAM_INDEX;
-        av_packet_rescale_ts(pkt, enc_ctx->time_base,
+        log_packet(pkt, tctx->out_video_stream, "out");
+        av_packet_rescale_ts(pkt, tctx->dec_ctx->pkt_timebase,
                              tctx->out_video_stream->time_base);
-        log_packet(tctx, pkt, "out");
-        if (!do_write) {
-            fprintf(stderr, "don't write yet!\n");
-            continue;
-        }
         if ((ret = av_interleaved_write_frame(tctx->ofmt_ctx, pkt)) < 0) {
             fprintf(stderr, "Error during writing data to output file: %s\n",
                     av_err2str(ret));
@@ -338,75 +305,28 @@ int dec_enc(TranscodeContext *tctx, AVPacket *pkt, int64_t start_ts,
             return 0;
         } else if (ret < 0) {
             fprintf(stderr, "Error while decoding: %s\n", av_err2str(ret));
-            goto dec_enc_end;
+            av_frame_free(&frame);
+            return ret;
         }
 
         if (!enc_ctx->hw_frames_ctx) {
-            /* we need to ref hw_frames_ctx of decoder to initialize encoder's
-               codec. Only after we get a decoded frame, can we obtain its
-               hw_frames_ctx */
-            enc_ctx->hw_frames_ctx = av_buffer_ref(dec_ctx->hw_frames_ctx);
-            if (!enc_ctx->hw_frames_ctx) {
-                fprintf(stderr,
-                        "Failed to reference decoder context hw_frames_ctx\n");
+            if ((ret = config_enc(tctx)) < 0) {
+                fprintf(stderr, "Failed to configure encoder\n");
                 goto dec_enc_end;
             }
-
-            enc_ctx->time_base = av_inv_q(dec_ctx->framerate);
-            enc_ctx->pix_fmt = AV_PIX_FMT_QSV;
-
-            // TODO: variable out video dimensions
-            enc_ctx->width = dec_ctx->width;
-            enc_ctx->height = dec_ctx->height;
-
-            // TODO: handle encoder options
-
-            if ((ret = avcodec_open2(enc_ctx, enc_ctx->codec, NULL)) < 0) {
-                fprintf(stderr, "Failed to open encode codec: %s\n",
-                        av_err2str(ret));
-                goto dec_enc_end;
-            }
-
-            tctx->out_video_stream->time_base = enc_ctx->time_base;
-            ret = avcodec_parameters_from_context(
-                tctx->out_video_stream->codecpar, enc_ctx);
-            if (ret < 0) {
-                fprintf(stderr, "Failed to copy codec parameters to stream\n");
-                goto dec_enc_end;
-            }
-
-            if ((ret = avformat_write_header(tctx->ofmt_ctx, NULL)) < 0) {
-                fprintf(stderr, "Error while writing stream header: %s\n",
-                        av_err2str(ret));
-                goto dec_enc_end;
-            }
-
-            // dump_transcode_context(tctx);
         }
 
         int64_t frame_ts =
             av_rescale_q(frame->pts, dec_ctx->pkt_timebase, AV_TIME_BASE_Q);
 
-        int do_write = start_ts <= frame_ts && frame_ts < end_ts;
-        frame->pts =
-            av_rescale_q(frame->pts, dec_ctx->pkt_timebase, enc_ctx->time_base);
-        if ((ret = encode_write(tctx, pkt, frame, do_write)) < 0)
-            fprintf(stderr, "Error during encoding and writing\n");
-
-        if (frame_ts < start_ts) {
+        if (frame_ts < start_ts || end_ts <= frame_ts) {
             fprintf(stderr,
-                    "Decoded frame timestamp %ld is smaller than start "
-                    "timestamp %ld\n",
-                    frame_ts, start_ts);
+                    "Video frame ts %ld(%ld) is out of range [%ld, %ld)\n",
+                    frame->pts, frame_ts, start_ts, end_ts);
             goto dec_enc_end;
         }
-        if (end_ts <= frame_ts) {
-            fprintf(stderr,
-                    "Decoded frame timestamp %ld is bigger than or equal to "
-                    "end timestamp %ld\n",
-                    frame_ts, end_ts);
-            return 0;
-        }
+        if ((ret = encode_write(tctx, pkt, frame)) < 0)
+            fprintf(stderr, "Error during encoding and writing\n");
 
     dec_enc_end:
         av_frame_free(&frame);
@@ -421,13 +341,15 @@ int dec_enc(TranscodeContext *tctx, AVPacket *pkt, int64_t start_ts,
  * - output in mpegts format
  * - start and duration are in seconds
  * - returns -1 on error
+ * - segment range is exactly [start_ts, end_ts)
  */
 // TODO: add arguments for decoding and encoding
 // TODO: return pointer to buffer
 int transcode_segment(const char *in_filename, const char *encoder_name,
-                      const double start, const double duration) {
-    int64_t start_ts = (int64_t)(start * AV_TIME_BASE);
-    int64_t end_ts = start_ts + (int64_t)(duration * AV_TIME_BASE);
+                      const double start, const double duration,
+                      uint8_t **output_buffer, int *output_size) {
+    int64_t start_ts = (int64_t)round(start * AV_TIME_BASE);
+    int64_t end_ts = (int64_t)round((duration + start) * AV_TIME_BASE);
     TranscodeContext *tctx = malloc(sizeof(TranscodeContext));
     AVPacket *pkt = NULL;
     AVBufferRef *hw_device_ctx = NULL;
@@ -443,7 +365,7 @@ int transcode_segment(const char *in_filename, const char *encoder_name,
 
     if ((ret = av_hwdevice_ctx_create(&hw_device_ctx, AV_HWDEVICE_TYPE_QSV,
                                       NULL, NULL, 0)) < 0) {
-        fprintf(stderr, "Failed to create a QSV devoce. Error code: %s\n",
+        fprintf(stderr, "Failed to create a QSV device. Error code: %s\n",
                 av_err2str(ret));
         goto end;
     }
@@ -459,81 +381,80 @@ int transcode_segment(const char *in_filename, const char *encoder_name,
         goto end;
     }
 
-    dump_transcode_context(tctx);
+    tctx->audio_pktq = packet_queue_new();
 
-    // // adjust start timestamp with stream's start time stamp
+    // adjust start timestamp with stream's start time stamp
     int64_t stream_start_ts =
-        av_rescale_q(tctx->in_audio_stream->start_time,
-                     tctx->in_audio_stream->time_base, AV_TIME_BASE_Q);
+        av_rescale_q(tctx->in_video_stream->start_time,
+                     tctx->in_video_stream->time_base, AV_TIME_BASE_Q);
+
     end_ts += stream_start_ts;
 
-    // // seek to start_ts
-
-    // av_seek_frame(tctx->ifmt_ctx, tctx->in_video_stream_index,
-    //               av_rescale_q(start_ts,
-    //                            AV_TIME_BASE_Q,
-    //                            tctx->in_video_stream->time_base),
-    //               AVSEEK_FLAG_BACKWARD);
-
-    // av_seek_frame(tctx->ifmt_ctx, -1, start_ts, AVSEEK_FLAG_BACKWARD);
-
-    // int64_t start_ts_atb = av_rescale_q(start_ts, AV_TIME_BASE_Q,
-    //                                     tctx->in_audio_stream->time_base);
-    // avformat_seek_file(tctx->ifmt_ctx, tctx->in_audio_stream_index,
-    // INT64_MIN,
-    //                    start_ts_atb, start_ts_atb, AVSEEK_FLAG_BACKWARD);
-
+    // seek based on video stream
     int64_t start_ts_vtb = av_rescale_q(start_ts, AV_TIME_BASE_Q,
                                         tctx->in_video_stream->time_base);
     avformat_seek_file(tctx->ifmt_ctx, tctx->in_video_stream_index, INT64_MIN,
                        start_ts_vtb, start_ts_vtb, AVSEEK_FLAG_BACKWARD);
+    fprintf(stderr, "START_TS: %ld\n", stream_start_ts);
 
-    // avformat_seek_file(tctx->ifmt_ctx, -1, INT64_MIN, start_ts, start_ts,
-    //                    AVSEEK_FLAG_BACKWARD);
+    avcodec_flush_buffers(tctx->dec_ctx);
     start_ts += stream_start_ts;
 
     fprintf(stderr, "start: %ld\tend: %ld\n", start_ts, end_ts);
-    while (ret >= 0) {
+    int video_stream_end = 0, audio_stream_end = 0;
+    while (ret >= 0 && !(video_stream_end && audio_stream_end)) {
         if ((ret = av_read_frame(tctx->ifmt_ctx, pkt)) < 0)
             break;
 
         int64_t pkt_pts = av_rescale_q(
             pkt->pts, tctx->ifmt_ctx->streams[pkt->stream_index]->time_base,
             av_get_time_base_q());
-        log_packet(tctx, pkt, "in");
-        if (pkt_pts > end_ts)
-            break;
+        log_packet(pkt, tctx->ifmt_ctx->streams[pkt->stream_index], "in");
 
-        if (pkt->stream_index == tctx->in_video_stream_index) {
-            // decode packet then encode frame
-            dec_enc(tctx, pkt, start_ts, end_ts);
-            av_packet_unref(pkt);
-        } else if (pkt->stream_index == tctx->in_audio_stream_index) {
-            if (pkt_pts < start_ts) {
-                fprintf(stderr,
-                        "Audio packet pts %ld is smaller than start "
-                        "timestamp %ld\n",
-                        pkt_pts, start_ts);
-                continue;
+        if (pkt->stream_index == tctx->in_video_stream_index &&
+            !video_stream_end) {
+            if (pkt_pts >= end_ts && (pkt->flags & AV_PKT_FLAG_KEY)) {
+                video_stream_end = 1;
+                fprintf(stderr, "video stream end pkt_pts %ld > end_ts %ld\n",
+                        pkt_pts, end_ts);
+                goto cont_main_loop;
             }
+            // decode packet then encode frame
+            if ((ret = dec_enc(tctx, pkt, start_ts, end_ts)) < 0) {
+                fprintf(stderr, "Error on dec_enc %d\n", ret);
+            }
+            av_packet_unref(pkt);
+        } else if (pkt->stream_index == tctx->in_audio_stream_index &&
+                   !audio_stream_end) {
+            if (end_ts <= pkt_pts)
+                audio_stream_end = 1;
+            if (pkt_pts < start_ts || end_ts <= pkt_pts) {
+                fprintf(stderr, "Audio packet %ld is not in range  [%ld %ld)\n",
+                        pkt_pts, start_ts, end_ts);
+                goto cont_main_loop;
+            }
+
             if (!tctx->enc_ctx->hw_frames_ctx) {
+                packet_queue_push(tctx->audio_pktq, pkt);
                 fprintf(stderr, "encoder hw_frames_ctx not initialized yet\n");
-                continue;
+                goto cont_main_loop;
             }
             // copy audio codecs
             // continue;
             pkt->stream_index = OUT_AUDIO_STREAM_INDEX;
+            pkt->pos = -1;
             av_packet_rescale_ts(pkt, tctx->in_audio_stream->time_base,
                                  tctx->out_audio_stream->time_base);
-            pkt->pos = -1;
-            log_packet(tctx, pkt, "out");
+            log_packet(pkt, tctx->out_audio_stream, "out");
 
             ret = av_interleaved_write_frame(tctx->ofmt_ctx, pkt);
             if (ret < 0) {
                 fprintf(stderr, "Error muxing audio packet\n");
-                break;
+                goto cont_main_loop;
             }
         }
+    cont_main_loop:
+        av_packet_unref(pkt);
     }
 
     // flush decoder
@@ -543,7 +464,7 @@ int transcode_segment(const char *in_filename, const char *encoder_name,
         goto end;
     }
 
-    if ((ret = encode_write(tctx, pkt, NULL, 1)) < 0) {
+    if ((ret = encode_write(tctx, pkt, NULL)) < 0) {
         fprintf(stderr, "Failed to flush encoder %s\n", av_err2str(ret));
         goto end;
     }
@@ -552,6 +473,9 @@ int transcode_segment(const char *in_filename, const char *encoder_name,
         fprintf(stderr, "Failed to write trailer %s\n", av_err2str(ret));
         goto end;
     }
+
+    *output_size = avio_close_dyn_buf(tctx->ofmt_ctx->pb, output_buffer);
+    tctx->ofmt_ctx->pb = NULL;
 
     ret = 0;
 end:
@@ -564,6 +488,11 @@ end:
     return ret;
 }
 
+void free_buffer(uint8_t *buffer) {
+    av_free(buffer);
+}
+
+#if 0
 int main(int argc, char **argv) {
     if (argc != 5) {
         fprintf(stderr, "usage: %s <input file> <encoder> <start> <duration>\n",
@@ -575,14 +504,26 @@ int main(int argc, char **argv) {
     const char *encoder_name = argv[2];
     const double start = atof(argv[3]);
     const double duration = atof(argv[4]);
-    int ret = transcode_segment(in_filename, encoder_name, start, duration);
+    
+    uint8_t *buffer = NULL;
+    int buffer_size = 0;
+    int ret = transcode_segment(in_filename, encoder_name, start, duration, &buffer, &buffer_size);
 
     if (ret < 0) {
         fprintf(stderr,
                 "failed to transcode segment from %s starting at %lf for %lf "
                 "seconds",
                 in_filename, start, duration);
-        return 0;
+        av_free(buffer);
+        return 1;
     }
-}
+    
+    if (buffer && buffer_size > 0) {
+        fwrite(buffer, 1, buffer_size, stdout);
+        fflush(stdout);
+    }
 
+    av_free(buffer);
+    return 0;
+}
+#endif
