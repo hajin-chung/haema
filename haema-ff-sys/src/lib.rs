@@ -3,7 +3,7 @@ use std::os::raw::{c_char, c_double, c_int};
 use std::slice;
 
 unsafe extern "C" {
-    fn transcode_segment(
+    fn hm_transcode_segment(
         in_filename: *const c_char,
         encoder_name: *const c_char,
         start: c_double,
@@ -12,12 +12,12 @@ unsafe extern "C" {
         output_size: *mut c_int,
     ) -> c_int;
 
-    fn free_buffer(buffer: *mut u8);
+    fn hm_free_buffer(buffer: *mut u8);
 
     fn hm_probe(in_filename: *const c_char) -> c_double;
 }
 
-pub fn hm_transcode(
+pub fn transcode_segment(
     in_filename: &str,
     encoder_name: &str,
     start: f64,
@@ -29,7 +29,7 @@ pub fn hm_transcode(
     let mut output_size: i32 = 0;
 
     let ret = unsafe {
-        transcode_segment(
+        hm_transcode_segment(
             in_filename.as_ptr(),
             encoder_name.as_ptr(),
             start,
@@ -43,16 +43,14 @@ pub fn hm_transcode(
         return Err(ret);
     }
 
-    let data_slice = unsafe {
-        let slc = { slice::from_raw_parts(output_data, output_size as usize) };
-        free_buffer(output_data);
-        slc
-    };
-    let data_vec = data_slice.to_vec();
+    let slc = unsafe { slice::from_raw_parts(output_data, output_size as usize) };
+    let data_vec = slc.to_vec();
+    unsafe { hm_free_buffer(output_data) };
+
     Ok(data_vec)
 }
 
-pub fn hm_get_video_duration(in_filename: &str) -> f64 {
+pub fn get_video_duration(in_filename: &str) -> f64 {
     let in_filename = CString::new(in_filename).unwrap();
     unsafe { hm_probe(in_filename.as_ptr()) }
 }
@@ -71,7 +69,7 @@ mod tests {
         let mut output_buffer: *mut u8 = std::ptr::null_mut();
         let mut output_size: i32 = 0;
         unsafe {
-            let result = transcode_segment(
+            let result = hm_transcode_segment(
                 in_filename.as_ptr(),
                 encoder_name.as_ptr(),
                 start,

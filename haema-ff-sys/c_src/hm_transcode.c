@@ -345,7 +345,7 @@ int dec_enc(TranscodeContext *tctx, AVPacket *pkt, int64_t start_ts,
  */
 // TODO: add arguments for decoding and encoding
 // TODO: return pointer to buffer
-int transcode_segment(const char *in_filename, const char *encoder_name,
+int hm_transcode_segment(const char *in_filename, const char *encoder_name,
                       const double start, const double duration,
                       uint8_t **output_buffer, int *output_size) {
     int64_t start_ts = (int64_t)round(start * AV_TIME_BASE);
@@ -488,7 +488,7 @@ end:
     return ret;
 }
 
-void free_buffer(uint8_t *buffer) {
+void hm_free_buffer(uint8_t *buffer) {
     av_free(buffer);
 }
 

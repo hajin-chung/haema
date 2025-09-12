@@ -1,4 +1,4 @@
-use haema_ff_sys::{hm_get_video_duration, hm_transcode};
+use haema_ff_sys;
 use regex::Regex;
 use std::fmt;
 use std::str::FromStr;
@@ -116,7 +116,7 @@ impl fmt::Display for StreamType {
 }
 
 pub async fn get_video_duration(video_path: &str) -> Result<f64, AppError> {
-    Ok(hm_get_video_duration(video_path))
+    Ok(haema_ff_sys::get_video_duration(video_path))
 }
 
 pub fn create_hls_media_playlist(video_duration: f64, segment_duration: f64) -> String {
@@ -164,7 +164,7 @@ pub async fn compute_video_segment(
         video_duration - start
     };
 
-    hm_transcode(video_path, "h264_qsv", start, duration)
+    haema_ff_sys::transcode_segment(video_path, "h264_qsv", start, duration)
         .map_err(|err| AppError::Error(format!("hm_transcode failed with code {err}")))
 }
 
