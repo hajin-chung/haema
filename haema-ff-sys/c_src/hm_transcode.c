@@ -11,16 +11,14 @@
  * timestamps of source video are preserved in segmented output.
  */
 
-#include <libavformat/avio.h>
-#include <libavutil/avutil.h>
-#include <libavutil/mathematics.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <libavcodec/avcodec.h>
 #include <libavcodec/packet.h>
-#include <libavformat/avformat.h>
+#include <libavformat/avio.h>
+#include <libavutil/avutil.h>
+#include <libavutil/mathematics.h>
 
 #include "include/hm_util.h"
 

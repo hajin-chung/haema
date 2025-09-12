@@ -38,6 +38,7 @@ double hm_probe(const char *in_filename) {
     int64_t duration_ts = av_rescale_q(duration_vstb, vs->time_base, AV_TIME_BASE_Q);
     double duration_s = (double)duration_ts / AV_TIME_BASE;
 
+    avformat_close_input(&ifmt_ctx);
     return duration_s;
 }
 
