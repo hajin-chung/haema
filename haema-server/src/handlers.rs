@@ -1,8 +1,8 @@
 use crate::error::AppError;
 use crate::state::AppState;
 use crate::video::{
-    StreamType, compute_video_segment, create_hls_media_playlist, get_video_info,
-    get_video_duration, parse_segment_filename,
+    StreamType, compute_video_segment, create_hls_media_playlist, get_video_duration,
+    get_video_info, parse_segment_filename,
 };
 use axum::extract::State;
 use axum::http::HeaderValue;
@@ -13,7 +13,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-const SEGMENT_DURATION:f64 = 4.0;
+const SEGMENT_DURATION: f64 = 4.0;
 
 pub async fn error_logging_middleware(req: Request, next: Next) -> Response {
     let response = next.run(req).await;
@@ -50,12 +50,16 @@ pub async fn get_video_media_playlist(
 ) -> Result<Response<String>, AppError> {
     // let _video_info = get_video_info(&video_id).await?;
     let stream_type: StreamType = stream_type.parse()?;
-    let video_path = "/mnt/d/anime/01.mp4";
+    let video_path = "/mnt/d/vod/25.08.12 뀨.mp4";
 
     // TODO: cache this result
     let video_duration = get_video_duration(video_path).await?;
     // TODO: configurable segment duration
-    let playlist = create_hls_media_playlist(video_duration, SEGMENT_DURATION);
+    let playlist = tokio::task::spawn_blocking(move || {
+        create_hls_media_playlist(video_duration, SEGMENT_DURATION)
+    })
+    .await
+    .map_err(|err| AppError::Error(err.to_string()))?;
     let res = Response::builder()
         .header(header::CONTENT_TYPE, "application/vnd.apple.mpegurl")
         .body(playlist)
@@ -70,13 +74,15 @@ pub async fn get_video_segment(
 ) -> Result<Response, AppError> {
     let stream_type: StreamType = stream_type.parse()?;
     let segment_idx = parse_segment_filename(&segment_filename)?;
-    let video_path = "/mnt/d/anime/01.mp4";
+    let video_path = "/mnt/d/vod/25.08.12 뀨.mp4";
 
     let video_duration = get_video_duration(video_path).await?;
-    let segment = compute_video_segment(video_path, video_duration, SEGMENT_DURATION, segment_idx).await?;
+    let segment =
+        compute_video_segment(video_path, video_duration, SEGMENT_DURATION, segment_idx).await?;
 
     let mut res = segment.into_response();
     res.headers_mut()
         .insert(header::CONTENT_TYPE, HeaderValue::from_static("video/MP2T"));
     Ok(res)
 }
+

@@ -478,7 +478,7 @@ int hm_transcode_segment(const char *in_filename, const char *encoder_name,
     ret = 0;
 end:
     avformat_close_input(&tctx->ifmt_ctx);
-    avformat_close_input(&tctx->ofmt_ctx);
+    avformat_free_context(tctx->ofmt_ctx);
     avcodec_free_context(&tctx->dec_ctx);
     avcodec_free_context(&tctx->enc_ctx);
     av_buffer_unref(&hw_device_ctx);

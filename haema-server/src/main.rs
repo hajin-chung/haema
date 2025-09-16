@@ -15,7 +15,10 @@ use tower_http::cors::{Any, CorsLayer};
 
 #[tokio::main]
 async fn main() {
-    let cors = CorsLayer::new().allow_origin(Any).allow_headers(Any).allow_methods(Any);
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_headers(Any)
+        .allow_methods(Any);
     let app_state = state::AppState::new();
     let app = Router::new()
         .route("/", get(root))
@@ -39,3 +42,4 @@ async fn main() {
 
     axum::serve(listener, app).await.unwrap();
 }
+

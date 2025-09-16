@@ -157,6 +157,13 @@ almost like a reading list
         `libavformat/avformat.h > av_write_trailer`
 
 ```bash
+cd FFmpeg
+./configure --enable-vaapi --enable-libvpl
+make -j12
+sudo make install
+```
+
+```bash
 ffmpeg version n7.1.1-57-g1b48158a23 Copyright (c) 2000-2025 the FFmpeg developers
   built with gcc 13 (Ubuntu 13.3.0-6ubuntu2~24.04)
   configuration: --enable-vaapi --enable-libvpl

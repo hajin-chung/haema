@@ -62,22 +62,25 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let in_filename = CString::new("/mnt/d/anime/01.mp4").unwrap();
+        let in_filename = CString::new("/mnt/d/vod/25.08.12 뀨.mp4").unwrap();
         let encoder_name = CString::new("h264_qsv").unwrap();
         let start: f64 = 20.0;
         let duration: f64 = 4.0;
         let mut output_buffer: *mut u8 = std::ptr::null_mut();
         let mut output_size: i32 = 0;
-        unsafe {
-            let result = hm_transcode_segment(
-                in_filename.as_ptr(),
-                encoder_name.as_ptr(),
-                start,
-                duration,
-                &mut output_buffer,
-                &mut output_size,
-            );
-            assert_eq!(result, 0);
+        for i in 0..10 {
+            unsafe {
+                let result = hm_transcode_segment(
+                    in_filename.as_ptr(),
+                    encoder_name.as_ptr(),
+                    start,
+                    duration,
+                    &mut output_buffer,
+                    &mut output_size,
+                );
+                hm_free_buffer(output_buffer);
+                assert_eq!(result, 0);
+            }
         }
     }
 }

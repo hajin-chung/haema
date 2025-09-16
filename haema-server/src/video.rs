@@ -2,6 +2,7 @@ use haema_ff_sys;
 use regex::Regex;
 use std::fmt;
 use std::str::FromStr;
+use tokio::task;
 
 use crate::error::AppError;
 
@@ -116,7 +117,10 @@ impl fmt::Display for StreamType {
 }
 
 pub async fn get_video_duration(video_path: &str) -> Result<f64, AppError> {
-    Ok(haema_ff_sys::get_video_duration(video_path))
+    let video_path = video_path.to_owned();
+    task::spawn_blocking(move || haema_ff_sys::get_video_duration(&video_path))
+        .await
+        .map_err(|err| AppError::Error(err.to_string()))
 }
 
 pub fn create_hls_media_playlist(video_duration: f64, segment_duration: f64) -> String {
@@ -163,8 +167,13 @@ pub async fn compute_video_segment(
     } else {
         video_duration - start
     };
+    let video_path = video_path.to_owned();
 
-    haema_ff_sys::transcode_segment(video_path, "h264_qsv", start, duration)
-        .map_err(|err| AppError::Error(format!("hm_transcode failed with code {err}")))
+    task::spawn_blocking(move || {
+        haema_ff_sys::transcode_segment(&video_path, "h264_qsv", start, duration)
+    })
+    .await
+    .map_err(|e| AppError::Error(e.to_string()))?
+    .map_err(|err| AppError::Error(format!("hm_transcode failed with code {err}")))
 }
 
