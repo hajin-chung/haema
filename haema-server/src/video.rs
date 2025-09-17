@@ -33,10 +33,10 @@ pub enum VideoCodec {
 impl fmt::Display for VideoCodec {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            VideoCodec::AV1 => write!(f, "AV1"),
-            VideoCodec::H264 => write!(f, "H264"),
-            VideoCodec::H265 => write!(f, "H265"),
-            VideoCodec::None => write!(f, "None"),
+            VideoCodec::AV1 => write!(f, "av1_qsv"),
+            VideoCodec::H264 => write!(f, "h264_qsv"),
+            VideoCodec::H265 => write!(f, "hevc_qsv"),
+            VideoCodec::None => write!(f, "none"),
         }
     }
 }
@@ -157,6 +157,7 @@ pub fn create_hls_media_playlist(video_duration: f64, segment_duration: f64) -> 
 
 pub async fn compute_video_segment(
     video_path: &str,
+    stream_type: StreamType,
     video_duration: f64,
     segment_duration: f64,
     segment_idx: usize,
@@ -169,8 +170,14 @@ pub async fn compute_video_segment(
     };
     let video_path = video_path.to_owned();
 
+    eprintln!("{}", stream_type.video_codec.to_string());
     task::spawn_blocking(move || {
-        haema_ff_sys::transcode_segment(&video_path, "h264_qsv", start, duration)
+        haema_ff_sys::transcode_segment(
+            &video_path,
+            &stream_type.video_codec.to_string(),
+            start,
+            duration,
+        )
     })
     .await
     .map_err(|e| AppError::Error(e.to_string()))?

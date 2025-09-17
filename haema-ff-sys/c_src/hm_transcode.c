@@ -18,6 +18,7 @@
 #include <libavcodec/packet.h>
 #include <libavformat/avio.h>
 #include <libavutil/avutil.h>
+#include <libavutil/opt.h>
 #include <libavutil/mathematics.h>
 
 #include "include/hm_util.h"
@@ -121,7 +122,7 @@ int config_input(TranscodeContext *tctx) {
     return 0;
 }
 
-int config_output(TranscodeContext *tctx) {
+int config_output(TranscodeContext *tctx, const char *encoder_name) {
     AVStream *out_video_stream, *out_audio_stream;
     int ret;
 
@@ -141,8 +142,6 @@ int config_output(TranscodeContext *tctx) {
         return ret;
     }
 
-    // TODO: implement variable codec
-    const char *encoder_name = "h264_qsv";
     const AVCodec *enc_codec = avcodec_find_encoder_by_name(encoder_name);
     if (!enc_codec) {
         fprintf(stderr, "Could not find encoder: %s\n", encoder_name);
@@ -207,6 +206,10 @@ int config_enc(TranscodeContext *tctx) {
     enc_ctx->height = dec_ctx->height;
 
     // TODO: handle encoder options
+    if ((ret = av_opt_set(enc_ctx->priv_data, "preset", "veryslow", 0)) < 0) {
+        fprintf(stderr, "Failed to set preset to slower: %s\n", av_err2str(ret));
+        return ret;
+    }
 
     if ((ret = avcodec_open2(enc_ctx, enc_ctx->codec, NULL)) < 0) {
         fprintf(stderr, "Failed to open encode codec: %s\n", av_err2str(ret));
@@ -234,7 +237,7 @@ int config_enc(TranscodeContext *tctx) {
         pkt->pos = -1;
         av_packet_rescale_ts(pkt, tctx->in_audio_stream->time_base,
                              tctx->out_audio_stream->time_base);
-        log_packet(pkt, tctx->out_audio_stream, "out");
+        // log_packet(pkt, tctx->out_audio_stream, "out");
 
         ret = av_interleaved_write_frame(tctx->ofmt_ctx, pkt);
         if (ret < 0) {
@@ -261,7 +264,7 @@ int encode_write(TranscodeContext *tctx, AVPacket *pkt, AVFrame *frame) {
             break;
 
         pkt->stream_index = OUT_VIDEO_STREAM_INDEX;
-        log_packet(pkt, tctx->out_video_stream, "out");
+        // log_packet(pkt, tctx->out_video_stream, "out");
         av_packet_rescale_ts(pkt, tctx->dec_ctx->pkt_timebase,
                              tctx->out_video_stream->time_base);
         if ((ret = av_interleaved_write_frame(tctx->ofmt_ctx, pkt)) < 0) {
@@ -318,9 +321,9 @@ int dec_enc(TranscodeContext *tctx, AVPacket *pkt, int64_t start_ts,
             av_rescale_q(frame->pts, dec_ctx->pkt_timebase, AV_TIME_BASE_Q);
 
         if (frame_ts < start_ts || end_ts <= frame_ts) {
-            fprintf(stderr,
-                    "Video frame ts %ld(%ld) is out of range [%ld, %ld)\n",
-                    frame->pts, frame_ts, start_ts, end_ts);
+            // fprintf(stderr,
+            //         "Video frame ts %ld(%ld) is out of range [%ld, %ld)\n",
+            //         frame->pts, frame_ts, start_ts, end_ts);
             goto dec_enc_end;
         }
         if ((ret = encode_write(tctx, pkt, frame)) < 0)
@@ -374,7 +377,7 @@ int hm_transcode_segment(const char *in_filename, const char *encoder_name,
         goto end;
     }
 
-    if ((ret = config_output(tctx)) < 0) {
+    if ((ret = config_output(tctx, encoder_name)) < 0) {
         fprintf(stderr, "Failed to config output\n");
         goto end;
     }
@@ -393,12 +396,11 @@ int hm_transcode_segment(const char *in_filename, const char *encoder_name,
                                         tctx->in_video_stream->time_base);
     avformat_seek_file(tctx->ifmt_ctx, tctx->in_video_stream_index, INT64_MIN,
                        start_ts_vtb, start_ts_vtb, AVSEEK_FLAG_BACKWARD);
-    fprintf(stderr, "START_TS: %ld\n", stream_start_ts);
 
     avcodec_flush_buffers(tctx->dec_ctx);
     start_ts += stream_start_ts;
 
-    fprintf(stderr, "start: %ld\tend: %ld\n", start_ts, end_ts);
+    // fprintf(stderr, "start: %ld\tend: %ld\n", start_ts, end_ts);
     int video_stream_end = 0, audio_stream_end = 0;
     while (ret >= 0 && !(video_stream_end && audio_stream_end)) {
         if ((ret = av_read_frame(tctx->ifmt_ctx, pkt)) < 0)
@@ -407,14 +409,14 @@ int hm_transcode_segment(const char *in_filename, const char *encoder_name,
         int64_t pkt_pts = av_rescale_q(
             pkt->pts, tctx->ifmt_ctx->streams[pkt->stream_index]->time_base,
             av_get_time_base_q());
-        log_packet(pkt, tctx->ifmt_ctx->streams[pkt->stream_index], "in");
+        // log_packet(pkt, tctx->ifmt_ctx->streams[pkt->stream_index], "in");
 
         if (pkt->stream_index == tctx->in_video_stream_index &&
             !video_stream_end) {
             if (pkt_pts >= end_ts && (pkt->flags & AV_PKT_FLAG_KEY)) {
                 video_stream_end = 1;
-                fprintf(stderr, "video stream end pkt_pts %ld > end_ts %ld\n",
-                        pkt_pts, end_ts);
+                // fprintf(stderr, "video stream end pkt_pts %ld > end_ts %ld\n",
+                //         pkt_pts, end_ts);
                 goto cont_main_loop;
             }
             // decode packet then encode frame
@@ -427,14 +429,14 @@ int hm_transcode_segment(const char *in_filename, const char *encoder_name,
             if (end_ts <= pkt_pts)
                 audio_stream_end = 1;
             if (pkt_pts < start_ts || end_ts <= pkt_pts) {
-                fprintf(stderr, "Audio packet %ld is not in range  [%ld %ld)\n",
-                        pkt_pts, start_ts, end_ts);
+                // fprintf(stderr, "Audio packet %ld is not in range  [%ld %ld)\n",
+                //         pkt_pts, start_ts, end_ts);
                 goto cont_main_loop;
             }
 
             if (!tctx->enc_ctx->hw_frames_ctx) {
                 packet_queue_push(tctx->audio_pktq, pkt);
-                fprintf(stderr, "encoder hw_frames_ctx not initialized yet\n");
+                // fprintf(stderr, "encoder hw_frames_ctx not initialized yet\n");
                 goto cont_main_loop;
             }
             // copy audio codecs
@@ -443,7 +445,7 @@ int hm_transcode_segment(const char *in_filename, const char *encoder_name,
             pkt->pos = -1;
             av_packet_rescale_ts(pkt, tctx->in_audio_stream->time_base,
                                  tctx->out_audio_stream->time_base);
-            log_packet(pkt, tctx->out_audio_stream, "out");
+            // log_packet(pkt, tctx->out_audio_stream, "out");
 
             ret = av_interleaved_write_frame(tctx->ofmt_ctx, pkt);
             if (ret < 0) {

@@ -142,25 +142,46 @@ static inline void dump_transcode_context(TranscodeContext *tctx) {
             tctx->out_audio_stream->time_base.den);
 }
 
-static inline const AVCodec *find_qsv_decoder(enum AVCodecID id) {
+static inline const char *find_qsv_codec(enum AVCodecID id) {
     switch (id) {
     case AV_CODEC_ID_H264:
-        return avcodec_find_decoder_by_name("h264_qsv");
+        return "h264_qsv";
     case AV_CODEC_ID_HEVC:
-        return avcodec_find_decoder_by_name("hevc_qsv");
+        return "hevc_qsv";
     case AV_CODEC_ID_VP9:
-        return avcodec_find_decoder_by_name("vp9_qsv");
+        return "vp9_qsv";
     case AV_CODEC_ID_VP8:
-        return avcodec_find_decoder_by_name("vp8_qsv");
+        return "vp8_qsv";
     case AV_CODEC_ID_AV1:
-        return avcodec_find_decoder_by_name("av1_qsv");
+        return "av1_qsv";
     case AV_CODEC_ID_MPEG2VIDEO:
-        return avcodec_find_decoder_by_name("mpeg2_qsv");
+        return "mpeg2_qsv";
     case AV_CODEC_ID_MJPEG:
-        return avcodec_find_decoder_by_name("mjpeg_qsv");
+        return "mjpeg_qsv";
     default:
         fprintf(stderr, "Codec is not supportted by qsv\n");
         return NULL;
+    }
+}
+
+static inline const AVCodec *find_qsv_decoder(enum AVCodecID id) {
+    const char *qsv_codec_name = find_qsv_codec(id);
+    if (qsv_codec_name == NULL) {
+        fprintf(stderr, "Decoder is not supportted by qsv\n");
+        return NULL;
+    } else {
+        return avcodec_find_decoder_by_name(qsv_codec_name);
+    }
+}
+
+static inline const AVCodec *find_qsv_encoder_by_name(const char *name) {
+    const AVCodec *enc_codec = avcodec_find_encoder_by_name(name);
+    const char *qsv_codec_name = find_qsv_codec(enc_codec->id);
+    if (qsv_codec_name == NULL) {
+        fprintf(stderr, "Encoder is not supportted by qsv\n");
+        return NULL;
+    } else {
+        return avcodec_find_encoder_by_name(qsv_codec_name);
     }
 }
 

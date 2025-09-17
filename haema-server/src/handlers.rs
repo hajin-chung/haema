@@ -50,7 +50,8 @@ pub async fn get_video_media_playlist(
 ) -> Result<Response<String>, AppError> {
     // let _video_info = get_video_info(&video_id).await?;
     let stream_type: StreamType = stream_type.parse()?;
-    let video_path = "/mnt/d/vod/25.08.12 뀨.mp4";
+    // let video_path = "/mnt/d/vod/25.08.12 뀨.mp4";
+    let video_path = "/mnt/d/anime/01.mp4";
 
     // TODO: cache this result
     let video_duration = get_video_duration(video_path).await?;
@@ -74,11 +75,18 @@ pub async fn get_video_segment(
 ) -> Result<Response, AppError> {
     let stream_type: StreamType = stream_type.parse()?;
     let segment_idx = parse_segment_filename(&segment_filename)?;
-    let video_path = "/mnt/d/vod/25.08.12 뀨.mp4";
+    // let video_path = "/mnt/d/vod/25.08.12 뀨.mp4";
+    let video_path = "/mnt/d/anime/01.mp4";
 
     let video_duration = get_video_duration(video_path).await?;
-    let segment =
-        compute_video_segment(video_path, video_duration, SEGMENT_DURATION, segment_idx).await?;
+    let segment = compute_video_segment(
+        video_path,
+        stream_type,
+        video_duration,
+        SEGMENT_DURATION,
+        segment_idx,
+    )
+    .await?;
 
     let mut res = segment.into_response();
     res.headers_mut()

@@ -32,6 +32,8 @@ haema
     - [x] generate flame graph to analyze which part takes the most time
     - [x] rust ffi bindings for hm_transcode + project restructuring
     - [ ] pass encoder params to hm_transcode
+        - [x] send encoder codec
+        - [ ] send resolution
 - [ ] implement metadata endpoints (db, video metadata, indexing ...etc)
 - [ ] create docker image that builds ffmpeg with just the things hamea uses
 - [ ] create benchmarks
@@ -201,3 +203,6 @@ sys     0m0.961s
 ```
 
 after generating flamegraphs found out it seems ffmpeg doens't use libvpl and uses old libmfx I guess
+
+fixed ffmpeg libavcodec/qsvdec thread leak caused by a refcount leak  
+[pull request](https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/20532)
