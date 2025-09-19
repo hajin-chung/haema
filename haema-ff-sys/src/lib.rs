@@ -59,27 +59,30 @@ pub fn get_video_duration(in_filename: &str) -> f64 {
 mod tests {
     use crate::*;
     use std::ffi::CString;
+    use std::time::Instant;
 
     #[test]
-    fn it_works() {
-        let in_filename = CString::new("/mnt/d/vod/25.08.12 뀨.mp4").unwrap();
+    fn test_hm_transcode_segment() {
+        // let in_filename = CString::new("/mnt/d/vod/25.08.12 뀨.mp4").unwrap();
+        let in_filename = CString::new("/mnt/d/anime/01.mp4").unwrap();
         let encoder_name = CString::new("h264_qsv").unwrap();
-        let start: f64 = 20.0;
         let duration: f64 = 4.0;
         let mut output_buffer: *mut u8 = std::ptr::null_mut();
         let mut output_size: i32 = 0;
         for i in 0..10 {
+            let start_time = Instant::now();
             unsafe {
                 let result = hm_transcode_segment(
                     in_filename.as_ptr(),
                     encoder_name.as_ptr(),
-                    start,
+                    duration * i as f64,
                     duration,
                     &mut output_buffer,
                     &mut output_size,
                 );
                 hm_free_buffer(output_buffer);
                 assert_eq!(result, 0);
+                println!("{}ms elapsed", start_time.elapsed().as_millis());
             }
         }
     }

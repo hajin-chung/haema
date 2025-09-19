@@ -206,3 +206,7 @@ after generating flamegraphs found out it seems ffmpeg doens't use libvpl and us
 
 fixed ffmpeg libavcodec/qsvdec thread leak caused by a refcount leak  
 [pull request](https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/20532)
+
+tried doing fmp4 (attempt lives in fmp4 branch) found out generating fmp4 segments is not simple as generating
+mpegts files but we need fmp4 to use other codecs than h264. just have to dive deeper I think...
+
