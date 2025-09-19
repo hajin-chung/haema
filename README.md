@@ -4,7 +4,7 @@ simple self hosted streaming service in one binary and conf files
 
 ## features
 
-1. dynamic hls packaging
+1. dynamic hls(fmp4) packaging
     1. fake m3u8 based on keyframes of source video
     2. transcode or cut source video on demand
 2. keep track of watch history
@@ -31,6 +31,8 @@ haema
     - [x] output transcoded result to buffer and return that buffer currently it writes to stdout
     - [x] generate flame graph to analyze which part takes the most time
     - [x] rust ffi bindings for hm_transcode + project restructuring
+    - [ ] create init.mp4
+    - [ ] mux output into fmp4
     - [ ] pass encoder params to hm_transcode
         - [x] send encoder codec
         - [ ] send resolution
@@ -202,7 +204,74 @@ user    0m5.537s
 sys     0m0.961s
 ```
 
-after generating flamegraphs found out it seems ffmpeg doens't use libvpl and uses old libmfx I guess
-
 fixed ffmpeg libavcodec/qsvdec thread leak caused by a refcount leak  
 [pull request](https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/20532)
+
+after some tests mpegts is bad. it doesn't support av1 (spec still in progress). switching to fmp4
+
+
+```
+  Program A: Generating init.mp4
+
+  The job of this program is to run once per source video. It reads the source file's metadata and creates a single init.mp4 file. This file is small and contains the "recipe" that a video player needs to understand
+  the stream (codecs, timescale, dimensions, etc.).
+
+  The process is very similar to the previous example, but you stop after writing the header.
+
+  Workflow:
+
+   1. Open Input: Open your source MP4 file (avformat_open_input).
+   2. Allocate Output Context: Allocate an AVFormatContext for the output. You don't need to specify a format; it will be deduced from the filename.
+   1     avformat_alloc_output_context2(&ofmt_ctx, NULL, NULL, "init.mp4");
+   3. Set Muxer Options: This is the critical step. You need to tell the mp4 muxer to generate a fragmented header. The easiest way is with the dash movflag, which enables all the necessary fragmentation options
+      (empty_moov, frag_keyframe, etc.).
+
+   1     // Set the fragmentation flags on the output context's private data
+   2     av_opt_set(ofmt_ctx->priv_data, "movflags", "dash", 0);
+   4. Copy Streams: Create new streams on the output context and copy the codec parameters from the input streams using avcodec_parameters_copy().
+   5. Write Header: Open the output file (avio_open) and call avformat_write_header().
+
+   1     // This is the call that actually creates and writes the init.mp4 file
+   2     ret = avformat_write_header(ofmt_ctx, NULL);
+   6. Stop: That's it. After avformat_write_header succeeds, the init.mp4 is complete. You can now call av_write_trailer() (which does nothing in this case but is good practice) and then clean up and close all your
+      contexts. You do not write any frames.
+
+  ---
+
+  Program B: Generating a Media Segment (segmentN.m4s)
+
+  This program would be called by your server on-demand, for example, when a user's browser requests /video/segment5.m4s. It needs to generate just that one piece of the video.
+
+  Workflow:
+
+   1. Get Request Parameters: Your program would need to know the source file, the start time of the segment, and the segment number. Let's say the request is for segment #5, which starts at 20.0 seconds and has a
+      duration of 4.0 seconds.
+
+   2. Open Input and Seek: Open the original source MP4 file. Use av_seek_frame() to jump directly to the start of the desired segment. It's best to seek to the keyframe at or just before your target start time.
+   1     // Seek to the 20-second mark.
+   2     av_seek_frame(ifmt_ctx, -1, 20 * AV_TIME_BASE, AVSEEK_FLAG_BACKWARD);
+
+   3. Setup Output Context: This is very similar to Program A, but with two key differences.
+
+   1     avformat_alloc_output_context2(&ofmt_ctx, NULL, "mp4", "segment5.m4s");
+   2
+   3     // 1. Set the EXACT SAME movflags as before
+   4     av_opt_set(ofmt_ctx->priv_data, "movflags", "dash", 0);
+   5
+   6     // 2. CRITICAL: Set the fragment start number. This tells the muxer
+   7     // to number this media segment correctly (e.g., as the 5th segment).
+   8     av_opt_set_int(ofmt_ctx->priv_data, "frag_num", 5, 0);
+
+   4. Copy Streams & Write Header: Copy the codec parameters just as before. When you call avformat_write_header(), the muxer knows not to write another moov atom because the empty_moov flag (part of dash) is set. It
+      simply prepares to write the media fragment.
+
+   5. Remuxing Loop: Now, you read packets from the seeked position in the input file and write them to the output.
+       * Read frames with av_read_frame().
+       * Keep track of the duration of the packets you've written.
+       * Stop once you've written about 4 seconds of data and have ended on a keyframe.
+       * Write each packet with av_interleaved_write_frame().
+
+   6. Finalize Segment: Call av_write_trailer() to flush any buffered data and correctly finalize the .m4s segment file. Clean up and exit.
+
+  This architecture is highly efficient because you can generate any segment of the video without having to process the file from the beginning every time.
+```

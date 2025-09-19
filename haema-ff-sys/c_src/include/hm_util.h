@@ -1,6 +1,7 @@
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/buffer.h>
+#include <libavutil/dict.h>
 #include <libavutil/timestamp.h>
 
 typedef struct PacketQueueNode {
@@ -57,12 +58,13 @@ static inline void packet_queue_free(PacketQueue *pktq) {
     av_free(pktq);
 }
 
-typedef struct TranscodeContext {
+typedef struct HaemaContext {
     AVBufferRef *hw_device_ctx;
 
     const char *in_filename;
     AVFormatContext *ifmt_ctx;
     AVFormatContext *ofmt_ctx;
+    AVDictionary *muxer_opts;
 
     // best video stream's index
     int in_video_stream_index;
@@ -82,7 +84,7 @@ typedef struct TranscodeContext {
     AVCodecContext *enc_ctx;
 
     AVCodec *video_enc_codec;
-} TranscodeContext;
+} HaemaContext;
 
 static inline char *limit(char *str, int limit) {
     // FIXME: check strlen for out of bounds error
@@ -111,35 +113,35 @@ static inline void log_frame(AVFrame *frame, AVStream *stream, const char *tag) 
             av_ts2timestr(frame->duration, &tb));
 }
 
-static inline void dump_transcode_context(TranscodeContext *tctx) {
-    if (tctx->ifmt_ctx == NULL) {
+static inline void dump_transcode_context(HaemaContext *hmctx) {
+    if (hmctx->ifmt_ctx == NULL) {
         fprintf(stderr, "ifmt_ctx is NULL\n");
     } else {
-        av_dump_format(tctx->ifmt_ctx, 0, tctx->in_filename, 0);
+        av_dump_format(hmctx->ifmt_ctx, 0, hmctx->in_filename, 0);
     }
 
     fprintf(stderr, "\tInput video stream index: %d\n",
-            tctx->in_video_stream_index);
+            hmctx->in_video_stream_index);
     fprintf(stderr, "\tInput video start time: %s\n",
-            av_ts2timestr(tctx->in_video_stream->start_time,
-                          &tctx->in_video_stream->time_base));
+            av_ts2timestr(hmctx->in_video_stream->start_time,
+                          &hmctx->in_video_stream->time_base));
     fprintf(stderr, "\tInput audio stream index: %d\n",
-            tctx->in_audio_stream_index);
+            hmctx->in_audio_stream_index);
     fprintf(stderr, "\tInput audio start time: %s\n",
-            av_ts2timestr(tctx->in_audio_stream->start_time,
-                          &tctx->in_audio_stream->time_base));
+            av_ts2timestr(hmctx->in_audio_stream->start_time,
+                          &hmctx->in_audio_stream->time_base));
     fprintf(stderr, "\tInput audio stream time base: %d / %d\n",
-            tctx->in_audio_stream->time_base.num,
-            tctx->in_audio_stream->time_base.den);
+            hmctx->in_audio_stream->time_base.num,
+            hmctx->in_audio_stream->time_base.den);
 
-    if (tctx->ofmt_ctx == NULL) {
+    if (hmctx->ofmt_ctx == NULL) {
         fprintf(stderr, "ofmt_ctx is NULL\n");
     } else {
-        av_dump_format(tctx->ofmt_ctx, 0, NULL, 1);
+        av_dump_format(hmctx->ofmt_ctx, 0, NULL, 1);
     }
     fprintf(stderr, "\tOutput audio stream time base: %d / %d\n",
-            tctx->out_audio_stream->time_base.num,
-            tctx->out_audio_stream->time_base.den);
+            hmctx->out_audio_stream->time_base.num,
+            hmctx->out_audio_stream->time_base.den);
 }
 
 static inline const char *find_qsv_codec(enum AVCodecID id) {

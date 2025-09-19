@@ -3,7 +3,7 @@ use std::os::raw::{c_char, c_double, c_int};
 use std::slice;
 
 unsafe extern "C" {
-    fn hm_transcode_segment(
+    fn hm_fmp4_segment(
         in_filename: *const c_char,
         encoder_name: *const c_char,
         start: c_double,
@@ -17,7 +17,7 @@ unsafe extern "C" {
     fn hm_probe(in_filename: *const c_char) -> c_double;
 }
 
-pub fn transcode_segment(
+pub fn fmp4_segment(
     in_filename: &str,
     encoder_name: &str,
     start: f64,
@@ -29,7 +29,7 @@ pub fn transcode_segment(
     let mut output_size: i32 = 0;
 
     let ret = unsafe {
-        hm_transcode_segment(
+        hm_fmp4_segment(
             in_filename.as_ptr(),
             encoder_name.as_ptr(),
             start,
@@ -57,30 +57,22 @@ pub fn get_video_duration(in_filename: &str) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
-    use std::ffi::CString;
+    use crate::fmp4_segment;
+    use std::time::Instant;
 
     #[test]
-    fn it_works() {
-        let in_filename = CString::new("/mnt/d/vod/25.08.12 뀨.mp4").unwrap();
-        let encoder_name = CString::new("h264_qsv").unwrap();
-        let start: f64 = 20.0;
+    fn test_fmp4_segment() {
+        let in_filename: &str = "/mnt/d/anime/01.mp4";
+        let encoder_name: &str = "h264_qsv";
         let duration: f64 = 4.0;
-        let mut output_buffer: *mut u8 = std::ptr::null_mut();
-        let mut output_size: i32 = 0;
+
         for i in 0..10 {
-            unsafe {
-                let result = hm_transcode_segment(
-                    in_filename.as_ptr(),
-                    encoder_name.as_ptr(),
-                    start,
-                    duration,
-                    &mut output_buffer,
-                    &mut output_size,
-                );
-                hm_free_buffer(output_buffer);
-                assert_eq!(result, 0);
-            }
+            let start_time = Instant::now();
+            let buffer =
+                fmp4_segment(in_filename, encoder_name, i as f64 * duration, duration).unwrap();
+            println!("elapsed: {}ms", start_time.elapsed().as_millis());
+            let filename = format!("segment{i}.m4s");
+            std::fs::write(filename, buffer).unwrap();
         }
     }
 }

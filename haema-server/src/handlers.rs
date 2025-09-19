@@ -45,11 +45,11 @@ pub async fn get_video_master_playlist(
 }
 
 pub async fn get_video_media_playlist(
-    Path((video_id, stream_type)): Path<(String, String)>,
+    Path((_video_id, stream_type)): Path<(String, String)>,
     State(state): State<AppState>,
 ) -> Result<Response<String>, AppError> {
     // let _video_info = get_video_info(&video_id).await?;
-    let stream_type: StreamType = stream_type.parse()?;
+    let _stream_type: StreamType = stream_type.parse()?;
     // let video_path = "/mnt/d/vod/25.08.12 뀨.mp4";
     let video_path = "/mnt/d/anime/01.mp4";
 
@@ -90,7 +90,7 @@ pub async fn get_video_segment(
 
     let mut res = segment.into_response();
     res.headers_mut()
-        .insert(header::CONTENT_TYPE, HeaderValue::from_static("video/MP2T"));
+        .insert(header::CONTENT_TYPE, HeaderValue::from_static("video/mp4"));
     Ok(res)
 }
 

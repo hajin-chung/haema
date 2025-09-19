@@ -15,7 +15,7 @@ pub async fn get_video_info(video_id: &String) -> Result<VideoInfo, AppError> {
 }
 
 pub fn parse_segment_filename(segment_filename: &String) -> Result<usize, AppError> {
-    let re = Regex::new(r"(\d+)\.ts$").unwrap();
+    let re = Regex::new(r"(\d+)\..+$").unwrap();
     let caps = re
         .captures(&segment_filename)
         .ok_or(AppError::InvalidSegmentName)?;
@@ -142,14 +142,13 @@ pub fn create_hls_media_playlist(video_duration: f64, segment_duration: f64) -> 
 
     let mut playlist = String::from("");
     playlist += "#EXTM3U\n";
-    playlist += "#EXT-X-PLAYLIST-TYPE:VOD\n";
     playlist += format!("#EXT-X-TARGETDURATION:{}\n", target_duration).as_str();
-    playlist += "#EXT-X-VERSION:4\n";
-    playlist += "#EXT-X-MEDIA-SEQUENCE:0\n";
+    playlist += "#EXT-X-VERSION:7\n";
+    playlist += "#EXT-X-INDEPENDENT-SEGMENTS\n";
     durations.iter().enumerate().for_each(|(idx, duration)| {
         // playlist += "#EXT-X-DISCONTINUITY\n";
-        playlist += format!("#EXTINF:{}\n", duration).as_str();
-        playlist += format!("{}.ts\n", idx).as_str();
+        playlist += format!("#EXTINF:{},\n", 2.0*duration).as_str();
+        playlist += format!("{}.m4s\n", idx).as_str();
     });
     playlist += "#EXT-X-ENDLIST\n";
     playlist
@@ -172,7 +171,7 @@ pub async fn compute_video_segment(
 
     eprintln!("{}", stream_type.video_codec.to_string());
     task::spawn_blocking(move || {
-        haema_ff_sys::transcode_segment(
+        haema_ff_sys::fmp4_segment(
             &video_path,
             &stream_type.video_codec.to_string(),
             start,
