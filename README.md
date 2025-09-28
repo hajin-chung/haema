@@ -31,11 +31,14 @@ haema
     - [x] output transcoded result to buffer and return that buffer currently it writes to stdout
     - [x] generate flame graph to analyze which part takes the most time
     - [x] rust ffi bindings for hm_transcode + project restructuring
-    - [ ] reuse hardware context between transcodes
+    - [x] reuse hardware context between transcodes
     - [ ] pass encoder params to hm_transcode
         - [x] send encoder codec
         - [ ] send resolution
 - [ ] implement metadata endpoints (db, video metadata, indexing ...etc)
+    - [ ] implement db functions
+    - [ ] implement endpoints
+    - [ ] implement indexing process
 - [ ] create docker image that builds ffmpeg with just the things hamea uses
 - [ ] create benchmarks
 
@@ -57,18 +60,48 @@ type ShowInfo = {
     thumbnail: string,
     banner: string,
 };
-type Series = {
-    info: ShowInfo
+type VideoInfo = {
+    videoId: string,
+    duration: float,
+};
+type Series = ShowInfo & {
     episodes: Episode[] 
 };
-type Episode = {
-    id: string,
+type Episode = VideoInfo & {
     index: string,
     title: string,
 };
-type Movie = {
-    info: ShowInfo,
-};
+type Movie = ShowInfo & VideoInfo;
+```
+
+```sql
+CREATE TABLE IF NOT EXISTS series (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    thumbnail TEXT,
+    banner TEXT
+);
+CREATE TABLE IF NOT EXISTS episode (
+    series_id TEXT NOT NULL,
+    video_id TEXT NOT NULL,
+    index TEXT NOT NULL,
+    title TEXT NOT NULL,
+    FOREIGN KEY (series_id) REFERENCES series (id),
+    FOREIGN KEY (video_id) REFERENCES video (id),
+    PRIMARY KEY (series_id, video_id)
+);
+CREATE TABLE IF NOT EXISTS movie (
+    id TEXT PRIMARY KEY,
+    video_id TEXT,
+    title TEXT NOT NULL,
+    thumbnail TEXT,
+    banner TEXT,
+    FOREIGN KEY (video_id) REFERENCES video (id)
+);
+CREATE TABLE IF NOT EXISTS video (
+    id TEXT PRIMARY KEY,
+    duration REAL NOT NULL
+);
 ```
 
 1. list & search show
