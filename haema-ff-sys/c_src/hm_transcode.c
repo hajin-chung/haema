@@ -21,6 +21,7 @@
 #include <libavutil/opt.h>
 #include <libavutil/mathematics.h>
 
+#include "include/hm_context.h"
 #include "include/hm_util.h"
 
 const int OUT_VIDEO_STREAM_INDEX = 0;
@@ -345,14 +346,13 @@ int dec_enc(TranscodeContext *tctx, AVPacket *pkt, int64_t start_ts,
  * - segment range is exactly [start_ts, end_ts)
  */
 // TODO: add arguments for decoding and encoding
-int hm_transcode_segment(const char *in_filename, const char *encoder_name,
+int hm_transcode_segment(HMContext *hm_ctx, const char *in_filename, const char *encoder_name,
                       const double start, const double duration,
                       uint8_t **output_buffer, int *output_size) {
     int64_t start_ts = (int64_t)round(start * AV_TIME_BASE);
     int64_t end_ts = (int64_t)round((duration + start) * AV_TIME_BASE);
     TranscodeContext *tctx = malloc(sizeof(TranscodeContext));
     AVPacket *pkt = NULL;
-    AVBufferRef *hw_device_ctx = NULL;
     int ret;
 
     tctx->in_filename = in_filename;
@@ -363,13 +363,7 @@ int hm_transcode_segment(const char *in_filename, const char *encoder_name,
         return -1;
     }
 
-    if ((ret = av_hwdevice_ctx_create(&hw_device_ctx, AV_HWDEVICE_TYPE_QSV,
-                                      NULL, NULL, 0)) < 0) {
-        fprintf(stderr, "Failed to create a QSV device. Error code: %s\n",
-                av_err2str(ret));
-        goto end;
-    }
-    tctx->hw_device_ctx = hw_device_ctx;
+    tctx->hw_device_ctx = hm_ctx->hw_device_ctx;
 
     if ((ret = config_input(tctx)) < 0) {
         fprintf(stderr, "Failed to config input '%s'\n", in_filename);
@@ -482,7 +476,7 @@ end:
     avformat_free_context(tctx->ofmt_ctx);
     avcodec_free_context(&tctx->dec_ctx);
     avcodec_free_context(&tctx->enc_ctx);
-    av_buffer_unref(&hw_device_ctx);
+    free(tctx);
     av_packet_free(&pkt);
     return ret;
 }

@@ -31,6 +31,7 @@ haema
     - [x] output transcoded result to buffer and return that buffer currently it writes to stdout
     - [x] generate flame graph to analyze which part takes the most time
     - [x] rust ffi bindings for hm_transcode + project restructuring
+    - [ ] reuse hardware context between transcodes
     - [ ] pass encoder params to hm_transcode
         - [x] send encoder codec
         - [ ] send resolution

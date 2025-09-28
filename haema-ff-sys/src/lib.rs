@@ -3,7 +3,12 @@ use std::os::raw::{c_char, c_double, c_int};
 use std::slice;
 
 unsafe extern "C" {
+    fn hm_ctx_create() -> *const u8;
+
+    fn hm_ctx_free(ctx: *const u8);
+
     fn hm_transcode_segment(
+        hm_ctx: *const u8,
         in_filename: *const c_char,
         encoder_name: *const c_char,
         start: c_double,
@@ -17,42 +22,64 @@ unsafe extern "C" {
     fn hm_probe(in_filename: *const c_char) -> c_double;
 }
 
-pub fn transcode_segment(
-    in_filename: &str,
-    encoder_name: &str,
-    start: f64,
-    duration: f64,
-) -> Result<Vec<u8>, i32> {
-    let in_filename = CString::new(in_filename).unwrap();
-    let encoder_name = CString::new(encoder_name).unwrap();
-    let mut output_data: *mut u8 = std::ptr::null_mut();
-    let mut output_size: i32 = 0;
+pub struct HMContext {
+    hm_ctx: *const u8,
+}
 
-    let ret = unsafe {
-        hm_transcode_segment(
-            in_filename.as_ptr(),
-            encoder_name.as_ptr(),
-            start,
-            duration,
-            &mut output_data,
-            &mut output_size,
-        )
-    };
-
-    if ret < 0 {
-        return Err(ret);
+impl HMContext {
+    pub fn new() -> Self {
+        HMContext {
+            hm_ctx: unsafe { hm_ctx_create() },
+        }
     }
 
-    let slc = unsafe { slice::from_raw_parts(output_data, output_size as usize) };
-    let data_vec = slc.to_vec();
-    unsafe { hm_free_buffer(output_data) };
+    pub fn transcode_segment(
+        &self,
+        in_filename: &str,
+        encoder_name: &str,
+        start: f64,
+        duration: f64,
+    ) -> Result<Vec<u8>, i32> {
+        let in_filename = CString::new(in_filename).unwrap();
+        let encoder_name = CString::new(encoder_name).unwrap();
+        let mut output_data: *mut u8 = std::ptr::null_mut();
+        let mut output_size: i32 = 0;
 
-    Ok(data_vec)
+        let ret = unsafe {
+            hm_transcode_segment(
+                self.hm_ctx,
+                in_filename.as_ptr(),
+                encoder_name.as_ptr(),
+                start,
+                duration,
+                &mut output_data,
+                &mut output_size,
+            )
+        };
+
+        if ret < 0 {
+            return Err(ret);
+        }
+
+        let slc = unsafe { slice::from_raw_parts(output_data, output_size as usize) };
+        let data_vec = slc.to_vec();
+        unsafe { hm_free_buffer(output_data) };
+
+        Ok(data_vec)
+    }
 }
 
 pub fn get_video_duration(in_filename: &str) -> f64 {
     let in_filename = CString::new(in_filename).unwrap();
     unsafe { hm_probe(in_filename.as_ptr()) }
+}
+
+impl Drop for HMContext {
+    fn drop(&mut self) {
+        unsafe {
+            hm_ctx_free(self.hm_ctx);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -63,6 +90,8 @@ mod tests {
 
     #[test]
     fn test_hm_transcode_segment() {
+        let hm_ctx: *const u8 = unsafe { hm_ctx_create() };
+
         // let in_filename = CString::new("/mnt/d/vod/25.08.12 뀨.mp4").unwrap();
         let in_filename = CString::new("/mnt/d/anime/01.mp4").unwrap();
         let encoder_name = CString::new("h264_qsv").unwrap();
@@ -73,6 +102,7 @@ mod tests {
             let start_time = Instant::now();
             unsafe {
                 let result = hm_transcode_segment(
+                    hm_ctx,
                     in_filename.as_ptr(),
                     encoder_name.as_ptr(),
                     duration * i as f64,
@@ -85,6 +115,7 @@ mod tests {
                 println!("{}ms elapsed", start_time.elapsed().as_millis());
             }
         }
+        unsafe { hm_ctx_free(hm_ctx) };
     }
 }
 

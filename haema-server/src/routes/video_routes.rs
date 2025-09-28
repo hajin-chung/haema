@@ -1,42 +1,37 @@
-use crate::error::AppError;
+use crate::domain::SEGMENT_DURATION;
+use crate::services::{
+    compute_video_segment, create_hls_media_playlist, get_video_duration, parse_segment_filename,
+};
 use crate::state::AppState;
-use crate::video::{
-    StreamType, compute_video_segment, create_hls_media_playlist, get_video_duration,
-    get_video_info, parse_segment_filename,
-};
-use axum::extract::State;
-use axum::http::HeaderValue;
+use crate::{domain::StreamType, error::AppError};
 use axum::{
-    extract::{Path, Request},
-    http::header,
-    middleware::Next,
+    Router,
+    extract::{Path, State},
+    http::{HeaderValue, header},
     response::{IntoResponse, Response},
+    routing::get,
 };
 
-const SEGMENT_DURATION: f64 = 4.0;
-
-pub async fn error_logging_middleware(req: Request, next: Next) -> Response {
-    let response = next.run(req).await;
-
-    if let Some(err) = response.extensions().get::<AppError>() {
-        println!("{err}");
-    }
-
-    response
-}
-
-pub async fn root() -> Response<String> {
-    let res = Response::builder()
-        .header(header::CONTENT_TYPE, "text/html")
-        .body("Welcome to Haema server".to_string())
-        .unwrap();
-    res
+pub fn create_router() -> Router<AppState> {
+    Router::new()
+        .route(
+            "/api/v1/video/{video_id}/master.m3u8",
+            get(get_video_master_playlist),
+        )
+        .route(
+            "/api/v1/video/{video_id}/{stream_type}/stream.m3u8",
+            get(get_video_media_playlist),
+        )
+        .route(
+            "/api/v1/video/{video_id}/{stream_type}/{segment_filename}",
+            get(get_video_segment),
+        )
 }
 
 pub async fn get_video_master_playlist(
     Path(video_id): Path<String>,
 ) -> Result<Response<String>, AppError> {
-    let _video_info = get_video_info(&video_id).await?;
+    // let _video_info = get_video_info(&video_id).await?;
     let res = Response::builder()
         .header(header::CONTENT_TYPE, "application/vnd.apple.mpegurl")
         .body(video_id)
@@ -45,16 +40,16 @@ pub async fn get_video_master_playlist(
 }
 
 pub async fn get_video_media_playlist(
-    Path((video_id, stream_type)): Path<(String, String)>,
-    State(state): State<AppState>,
+    Path((_video_id, stream_type)): Path<(String, String)>,
+    State(_state): State<AppState>,
 ) -> Result<Response<String>, AppError> {
-    // let _video_info = get_video_info(&video_id).await?;
-    let stream_type: StreamType = stream_type.parse()?;
+    let _stream_type: StreamType = stream_type.parse()?;
     // let video_path = "/mnt/d/vod/25.08.12 뀨.mp4";
     let video_path = "/mnt/d/anime/01.mp4";
 
     // TODO: cache this result
-    let video_duration = get_video_duration(video_path).await?;
+    let video_duration = get_video_duration(video_path)?;
+
     // TODO: configurable segment duration
     let playlist = tokio::task::spawn_blocking(move || {
         create_hls_media_playlist(video_duration, SEGMENT_DURATION)
@@ -70,7 +65,7 @@ pub async fn get_video_media_playlist(
 }
 
 pub async fn get_video_segment(
-    Path((video_id, stream_type, segment_filename)): Path<(String, String, String)>,
+    Path((_video_id, stream_type, segment_filename)): Path<(String, String, String)>,
     State(state): State<AppState>,
 ) -> Result<Response, AppError> {
     let stream_type: StreamType = stream_type.parse()?;
@@ -78,8 +73,11 @@ pub async fn get_video_segment(
     // let video_path = "/mnt/d/vod/25.08.12 뀨.mp4";
     let video_path = "/mnt/d/anime/01.mp4";
 
-    let video_duration = get_video_duration(video_path).await?;
+    let video_duration = get_video_duration(video_path)?;
+
+    let hmff = state.hmff_pool.get().await;
     let segment = compute_video_segment(
+        hmff,
         video_path,
         stream_type,
         video_duration,
